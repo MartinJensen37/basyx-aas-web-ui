@@ -1,0 +1,42 @@
+services:
+  aas-web-ui:
+    image: basyx-aas-web-ui:processsequence-dev
+    build:
+      dockerfile: ../examples/ProcessSequence/Dockerfile.dev
+    develop:
+      watch:
+        - action: sync
+          path: ../../aas-web-ui
+          target: /app
+          ignore:
+            - node_modules/
+            - dist/
+            - dist-bff/
+            - test-results/
+            - playwright-report/
+            - package.json
+            - pnpm-lock.yaml
+            - pnpm-workspace.yaml
+            - .npmrc
+        - action: rebuild
+          path: ../../aas-web-ui/package.json
+        - action: rebuild
+          path: ../../aas-web-ui/pnpm-lock.yaml
+        - action: rebuild
+          path: ../../aas-web-ui/pnpm-workspace.yaml
+        - action: rebuild
+          path: ../../aas-web-ui/.npmrc
+    environment:
+      VITE_BASE_PATH: /
+      VITE_LOGO_LIGHT_PATH: Logo_light.svg
+      VITE_LOGO_DARK_PATH: Logo_dark.svg
+      VITE_PRIMARY_LIGHT_COLOR: '#003f7d'
+      VITE_PRIMARY_DARK_COLOR: '#90caf9'
+      VITE_AAS_REGISTRY_PATH: http://localhost:8082/shell-descriptors
+      VITE_SUBMODEL_REGISTRY_PATH: http://localhost:8083/submodel-descriptors
+      VITE_AAS_REPO_PATH: http://localhost:8081/shells
+      VITE_SUBMODEL_REPO_PATH: http://localhost:8081/submodels
+      VITE_CD_REPO_PATH: http://localhost:8081/concept-descriptions
+      VITE_AAS_DISCOVERY_PATH: http://localhost:8084/lookup/shells
+      VITE_ALLOW_LIST: 'true'
+      VITE_ENDPOINT_CONFIG_AVAILABLE: 'true'

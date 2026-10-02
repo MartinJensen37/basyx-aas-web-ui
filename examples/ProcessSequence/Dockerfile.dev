@@ -1,0 +1,9 @@
+FROM node:24-slim
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY scripts ./scripts
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+COPY . .
+EXPOSE 3000
+CMD ["pnpm", "exec", "vite", "--config", "src/pages/modules/ProcessSequence/dev/vite.config.mts", "--host", "0.0.0.0", "--port", "3000", "--strictPort"]
