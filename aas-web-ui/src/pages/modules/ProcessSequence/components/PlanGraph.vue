@@ -4,6 +4,7 @@
       <v-btn prepend-icon="mdi-plus" size="small" variant="tonal" @click="add('step')">Add step</v-btn>
       <v-btn :disabled="targets.length === 0" size="small" variant="text" @click="add('call')">Call subprocess</v-btn>
       <v-btn size="small" variant="text" @click="add('parallel')">Run in parallel</v-btn>
+      <v-btn size="small" variant="text" @click="add('conditional')">Optional flow</v-btn>
       <v-spacer />
 
       <v-btn
@@ -19,6 +20,9 @@
       <span class="text-caption text-medium-emphasis flex-grow-1">{{ insertionLabel }}</span>
 
       <template v-if="selected">
+        <v-btn v-if="selected.kind !== 'conditional'" size="small" variant="text" @click="makeOptional">Make optional</v-btn>
+        <v-btn v-else size="small" variant="text" @click="makeUnconditional">Run every product</v-btn>
+
         <v-btn
           aria-label="Move step earlier"
           :disabled="!location || location.index <= 0"
@@ -125,6 +129,26 @@
     if (!lane || lane.index < 0 || lane.index + delta < 0 || lane.index + delta >= lane.nodes.length) return
     const node = lane.nodes.splice(lane.index, 1)[0]!
     lane.nodes.splice(lane.index + delta, 0, node)
+  }
+
+  function makeOptional (): void {
+    const lane = location.value
+    if (!lane || lane.index < 0) return
+    const flow = newNode('conditional')
+    if (flow.kind !== 'conditional') return
+    const child = lane.nodes[lane.index]
+    flow.name = `Optional ${child.name}`
+    flow.nodes.push(toRaw(child))
+    lane.nodes[lane.index] = flow
+    emit('select', flow.id)
+  }
+
+  function makeUnconditional (): void {
+    const lane = location.value
+    const flow = selected.value
+    if (!lane || lane.index < 0 || flow?.kind !== 'conditional') return
+    lane.nodes.splice(lane.index, 1, ...flow.nodes)
+    emit('select', flow.nodes[0]?.id ?? '')
   }
 
   function remove (): void {

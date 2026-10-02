@@ -5,21 +5,32 @@ import { MarkerType } from '@vue-flow/core'
 export interface PlanGraphData {
   title: string
   subtitle: string
-  kind: PlanNode['kind'] | 'start' | 'end' | 'join' | 'branch'
+  kind: PlanNode['kind'] | 'start' | 'end' | 'join' | 'branch' | 'skip' | 'merge'
   planId?: string
   branchId?: string
   scopeId?: string
 }
 
 export const graphNodeHeight: Record<PlanGraphData['kind'], number> = {
-  step: 96, call: 120, parallel: 96, branch: 56, join: 56, start: 48, end: 48,
+  step: 96, call: 120, parallel: 96, conditional: 120, branch: 56, join: 56, skip: 56, merge: 56, start: 48, end: 48,
 }
+
+export const conditionalLaneId = (id: string) => `conditional-run:${id}`
 
 /** Find the owning sequence, so editing a branch never changes a sibling branch. */
 export function findLane (nodes: PlanNode[], id: string): { nodes: PlanNode[], index: number } | undefined {
   for (const [index, node] of nodes.entries()) {
     if (node.id === id) {
       return { nodes, index }
+    }
+    if (node.kind === 'conditional') {
+      if (conditionalLaneId(node.id) === id) {
+        return { nodes: node.nodes, index: -1 }
+      }
+      const found = findLane(node.nodes, id)
+      if (found) {
+        return found
+      }
     }
     if (node.kind === 'parallel') {
       for (const branch of node.branches) {
@@ -41,9 +52,12 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
   const edges: Edge[] = []
   const column = 280
   const gap = 32
-  const width = (lane: PlanNode[]): number => Math.max(1, ...lane.map(node => node.kind === 'parallel'
-    ? node.branches.reduce((sum, branch) => sum + width(branch.nodes), 0)
-    : 1))
+  const width = (lane: PlanNode[]): number => Math.max(1, ...lane.map(node => {
+    if (node.kind === 'conditional') {
+      return width(node.nodes) + 1
+    }
+    return node.kind === 'parallel' ? node.branches.reduce((sum, branch) => sum + width(branch.nodes), 0) : 1
+  }))
 
   function add (id: string, x: number, y: number, data: PlanGraphData): string {
     nodes.push({ id, type: 'plan', position: { x: x * column, y }, data })
@@ -60,33 +74,54 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
   function layout (lane: PlanNode[], x: number, y: number, incoming: string): { last: string, y: number } {
     let last = incoming
     for (const node of lane) {
+      let subtitle = 'Start all branches'
+      switch (node.kind) {
+        case 'step': {
+          subtitle = node.process?.name || 'Process step'
+          break
+        }
+        case 'call': {
+          subtitle = targets.find(target => target.id === node.scopeId)?.name || 'Subprocess'
+          break
+        }
+        case 'conditional': {
+          subtitle = `Every ${node.condition.every} products`
+          break
+        }
+        // No default
+      }
       const id = add(`node:${node.id}`, x, y, {
         title: node.name, kind: node.kind, planId: node.id,
         scopeId: node.kind === 'call' ? node.scopeId : undefined,
-        subtitle: node.kind === 'step'
-          ? (node.process?.name || 'Process step')
-          : (node.kind === 'call'
-              ? (targets.find(target => target.id === node.scopeId)?.name || 'Subprocess')
-              : 'Start all branches'),
+        subtitle,
       })
       connect(last, id)
       y += graphNodeHeight[node.kind] + gap
-      if (node.kind === 'parallel') {
-        const total = node.branches.reduce((sum, branch) => sum + width(branch.nodes), 0)
+      if (node.kind === 'parallel' || node.kind === 'conditional') {
+        const branches = node.kind === 'parallel'
+          ? node.branches
+          : [
+              { id: conditionalLaneId(node.id), name: 'Run this flow', nodes: node.nodes },
+              { id: `conditional-skip:${node.id}`, name: 'Skip this flow', nodes: [] },
+            ]
+        const total = branches.reduce((sum, branch) => sum + width(branch.nodes), 0)
         let left = x - total / 2
-        const ends = node.branches.map(branch => {
+        const ends = branches.map((branch, index) => {
           const size = width(branch.nodes)
           const center = left + size / 2
           left += size
+          const skip = node.kind === 'conditional' && index === 1
           const header = add(`branch:${branch.id}`, center, y, {
-            title: branch.name, subtitle: 'Select to insert at branch start', kind: 'branch', branchId: branch.id,
+            title: branch.name, subtitle: skip ? 'Continue without running this flow' : 'Select to insert at branch start',
+            kind: skip ? 'skip' : 'branch', branchId: skip ? undefined : branch.id, planId: skip ? node.id : undefined,
           })
           connect(id, header)
           return layout(branch.nodes, center, y + graphNodeHeight.branch + gap, header)
         })
         y = Math.max(...ends.map(end => end.y))
         last = add(`join:${node.id}`, x, y, {
-          title: 'Wait for all branches', subtitle: node.name, kind: 'join', planId: node.id,
+          title: node.kind === 'conditional' ? 'Continue after selected path' : 'Wait for all branches',
+          subtitle: node.name, kind: node.kind === 'conditional' ? 'merge' : 'join', planId: node.id,
         })
         y += graphNodeHeight.join + gap
         for (const end of ends) {

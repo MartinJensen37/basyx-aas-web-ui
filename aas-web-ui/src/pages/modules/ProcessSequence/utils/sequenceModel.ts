@@ -61,32 +61,48 @@ export function buildSequenceSubmodel (plan: ProcessPlan, id: string): AasElemen
   function nodes (items: PlanNode[]): AasElement {
     return collection('Steps', items.map((node, index) => {
       const common = [prop('NodeId', node.id), prop('Kind', node.kind), prop('Name', node.name), prop('Order', index, 'xs:nonNegativeInteger')]
-      if (node.kind === 'call') {
-        common.push(ref('CalledScope', scopeRef(node.scopeId)))
-      } else if (node.kind === 'parallel') {
-        common.push(collection('Branches', node.branches.map((branch, index) => collection(indexed('Branch', index), [
-          prop('BranchId', branch.id), prop('Name', branch.name), prop('Order', index, 'xs:nonNegativeInteger'), nodes(branch.nodes),
-        ], 'Branch'))))
-      } else {
-        if (node.process) {
-          common.push(collection('Process', processElements(node.process)))
+      switch (node.kind) {
+        case 'conditional': {
+          common.push(collection('Condition', [
+            prop('ConditionType', node.condition.kind), prop('EveryNProducts', node.condition.every, 'xs:positiveInteger'),
+            prop('CounterScope', 'productionRun'),
+          ]), nodes(node.nodes))
+
+          break
         }
-        if (node.requiredCapabilities !== undefined) {
-          common.push(requirements(node.requiredCapabilities))
+        case 'call': {
+          common.push(ref('CalledScope', scopeRef(node.scopeId)))
+
+          break
         }
-        if (node.resourceAasId) {
-          common.push(ref('Resource', modelRef([{ type: 'AssetAdministrationShell', value: node.resourceAasId }])))
+        case 'parallel': {
+          common.push(collection('Branches', node.branches.map((branch, index) => collection(indexed('Branch', index), [
+            prop('BranchId', branch.id), prop('Name', branch.name), prop('Order', index, 'xs:nonNegativeInteger'), nodes(branch.nodes),
+          ], 'Branch'))))
+
+          break
         }
-        common.push(prop('SkillId', node.skillId))
-        if (node.skillReference) {
-          common.push(ref('Skill', node.skillReference))
+        default: {
+          if (node.process) {
+            common.push(collection('Process', processElements(node.process)))
+          }
+          if (node.requiredCapabilities !== undefined) {
+            common.push(requirements(node.requiredCapabilities))
+          }
+          if (node.resourceAasId) {
+            common.push(ref('Resource', modelRef([{ type: 'AssetAdministrationShell', value: node.resourceAasId }])))
+          }
+          common.push(prop('SkillId', node.skillId))
+          if (node.skillReference) {
+            common.push(ref('Skill', node.skillReference))
+          }
+          if (node.executionMode) {
+            common.push(prop('ExecutionMode', node.executionMode))
+          }
+          common.push(collection('Bindings', node.bindings.map((binding, index) => collection(indexed('Binding', index), [
+            prop('Name', binding.name), prop('Value', binding.value), ...(binding.source ? sourceElements(binding.source) : []),
+          ], 'Binding'))))
         }
-        if (node.executionMode) {
-          common.push(prop('ExecutionMode', node.executionMode))
-        }
-        common.push(collection('Bindings', node.bindings.map((binding, index) => collection(indexed('Binding', index), [
-          prop('Name', binding.name), prop('Value', binding.value), ...(binding.source ? sourceElements(binding.source) : []),
-        ], 'Binding'))))
       }
       return collection(indexed('Step', index), common, 'Step')
     }))
@@ -119,6 +135,13 @@ export function readSequenceSubmodel (submodel: AasElement): ProcessPlan {
     return ordered(children(parent, 'Steps')).map(element => {
       const common = { id: value(element, 'NodeId'), name: value(element, 'Name') }
       const kind = value(element, 'Kind')
+      if (kind === 'conditional') {
+        const condition = field(element, 'Condition')
+        if (!condition || value(condition, 'ConditionType') !== 'everyNthProduct' || value(condition, 'CounterScope') !== 'productionRun') {
+          throw new Error('Unsupported optional flow condition or counter scope.')
+        }
+        return { ...common, kind, condition: { kind: 'everyNthProduct', every: Number(value(condition, 'EveryNProducts')) }, nodes: nodes(element) }
+      }
       if (kind === 'call') {
         return { ...common, kind, scopeId: target(element, 'CalledScope') }
       }

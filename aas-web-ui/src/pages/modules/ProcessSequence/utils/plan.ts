@@ -7,6 +7,9 @@ export function newNode (kind: PlanNode['kind'], scopeId = ''): PlanNode {
   if (kind === 'call') {
     return { id, kind, name: 'Subprocess', scopeId }
   }
+  if (kind === 'conditional') {
+    return { id, kind, name: 'Optional flow', condition: { kind: 'everyNthProduct', every: 5 }, nodes: [] }
+  }
   if (kind === 'parallel') {
     return {
       id, kind, name: 'Run in parallel',
@@ -28,11 +31,19 @@ export function newPlan (productAasId: string, name: string): ProcessPlan {
 }
 
 export function flattenNodes (nodes: PlanNode[]): PlanNode[] {
-  return nodes.flatMap(node => [node, ...(node.kind === 'parallel' ? node.branches.flatMap(branch => flattenNodes(branch.nodes)) : [])])
+  return nodes.flatMap(node => {
+    if (node.kind === 'conditional') {
+      return [node, ...flattenNodes(node.nodes)]
+    }
+    return [node, ...(node.kind === 'parallel' ? node.branches.flatMap(branch => flattenNodes(branch.nodes)) : [])]
+  })
 }
 
 export function parsePlan (text: string, productAasId: string): ProcessPlan {
   const plan = planSchema.parse(JSON.parse(text))
+  if (plan.scopes.some(scope => flattenNodes(scope.nodes).some(node => node.kind === 'conditional'))) {
+    plan.schema = 'process-sequence-plan/4.0'
+  }
   if (plan.productAasId !== productAasId) {
     throw new Error('This plan belongs to another product.')
   }
@@ -66,6 +77,9 @@ export function structuralIssues (plan: ProcessPlan): string[] {
       parent = scopes.get(parent)!.parentId
     }
     for (const node of flattenNodes(scope.nodes)) {
+      if (node.kind === 'conditional' && (node.condition.kind !== 'everyNthProduct' || !Number.isSafeInteger(node.condition.every) || node.condition.every < 1)) {
+        issues.push(`${scope.name} / ${node.name}: enter a positive whole number of products.`)
+      }
       if (ids.has(node.id)) {
         issues.push(`Duplicate step identity in ${scope.name}.`)
       }
@@ -130,6 +144,9 @@ export function planningNotes (plan: ProcessPlan): string[] {
       if (node.kind === 'parallel' && node.branches.some(branch => branch.nodes.length === 0)) {
         notes.push(`${scope.name} / ${node.name}: a parallel branch is empty.`)
       }
+      if (node.kind === 'conditional' && node.nodes.length === 0) {
+        notes.push(`${scope.name} / ${node.name}: optional flow is empty.`)
+      }
     }
   }
   return notes
@@ -147,7 +164,10 @@ export function mergeScopes (plan: ProcessPlan, incoming: PlanScope[]): void {
 export type ExpandedStep = { id: string, scopeId: string, step: StepNode, after: string[] }
 
 /** Expand calls per invocation and preserve all branch prerequisites at a join. No scheduling is implied. */
-export function expandPlan (plan: ProcessPlan, scopeId = plan.rootScopeId): ExpandedStep[] {
+export function expandPlan (plan: ProcessPlan, scopeId = plan.rootScopeId, productNumber = 1): ExpandedStep[] {
+  if (!Number.isSafeInteger(productNumber) || productNumber < 1) {
+    throw new Error('Product number must be a positive whole number within this production run.')
+  }
   const errors = structuralIssues(plan)
   if (errors.length > 0) {
     throw new Error(errors[0])
@@ -157,15 +177,30 @@ export function expandPlan (plan: ProcessPlan, scopeId = plan.rootScopeId): Expa
     let previous = incoming
     for (const node of nodes) {
       const nextPath = [...path, node.id]
-      if (node.kind === 'step') {
-        const id = JSON.stringify(nextPath)
-        result.push({ id, scopeId: owner, step: node, after: previous })
-        previous = [id]
-      } else if (node.kind === 'call') {
-        const child = plan.scopes.find(scope => scope.id === node.scopeId)!
-        previous = expand(child.nodes, child.id, nextPath, previous)
-      } else {
-        previous = [...new Set(node.branches.flatMap(branch => expand(branch.nodes, owner, [...nextPath, branch.id], previous)))]
+      switch (node.kind) {
+        case 'step': {
+          const id = JSON.stringify(nextPath)
+          result.push({ id, scopeId: owner, step: node, after: previous })
+          previous = [id]
+
+          break
+        }
+        case 'call': {
+          const child = plan.scopes.find(scope => scope.id === node.scopeId)!
+          previous = expand(child.nodes, child.id, nextPath, previous)
+
+          break
+        }
+        case 'conditional': {
+          if (productNumber % node.condition.every === 0) {
+            previous = expand(node.nodes, owner, nextPath, previous)
+          }
+
+          break
+        }
+        default: {
+          previous = [...new Set(node.branches.flatMap(branch => expand(branch.nodes, owner, [...nextPath, branch.id], previous)))]
+        }
       }
     }
     return previous

@@ -6,7 +6,7 @@ import { buildDemo } from '../demo/seed'
 import template from '../templates/ProductionSequence.json'
 import { readCapabilities } from './capabilities'
 import { matchCapabilities } from './capabilityMatching'
-import { parsePlan } from './plan'
+import { flattenNodes, parsePlan } from './plan'
 import { readPlanProcesses } from './planSources'
 import { readSkillCatalog } from './readers'
 import { buildSequenceSubmodel, readSequenceSubmodel } from './sequenceModel'
@@ -43,7 +43,7 @@ describe('pharma recipes and structured sequence', () => {
   it('uses the prescribed cycle order and the same parameters as the IDTA process reader', () => {
     for (const recipe of PHARMA_RECIPES) {
       const plan = demo.plans.find(plan => plan.productAasId.endsWith(`/aas/${recipe.id}`))!
-      const steps = plan.scopes[0].nodes
+      const steps = flattenNodes(plan.scopes[0].nodes).filter(node => node.kind === 'step')
       expect(steps.map(step => step.id)).toEqual(['Unpacking', 'Loading', ...recipe.volume.flatMap((_, index) => [`Filling_${index + 1}`, `Stoppering_${index + 1}`]), ...(recipe.format === 'vial' ? ['Capping'] : []), 'Inspection', 'Unloading', 'Packing'])
       for (const step of steps) {
         if (step.kind !== 'step') {

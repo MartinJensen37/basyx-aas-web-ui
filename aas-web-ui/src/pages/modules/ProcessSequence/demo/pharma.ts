@@ -1,4 +1,4 @@
-import type { PlanProcess, ProcessPlan, StepNode } from '../types/plan.ts'
+import type { PlanNode, PlanProcess, ProcessPlan, StepNode } from '../types/plan.ts'
 import { buildSequenceSubmodel, modelRef } from '../utils/sequenceModel.ts'
 
 export const PHARMA_BASE = 'https://smartproductionlab.aau.dk/demo/pharma'
@@ -16,9 +16,10 @@ const capRef = (owner: string, name: string) => modelRef([{ type: 'Submodel', va
 const skillRef = (owner: string, name: string) => modelRef([{ type: 'Submodel', value: sm(owner, 'skills') }, { type: 'SubmodelElementCollection', value: name }])
 
 type Limit = { name: string, value?: string | number, min?: number, max?: number, unit?: string }
-type Recipe = { id: string, name: string, format: 'vial' | 'syringe' | 'cartridge', volume: number[], diameter: number, stopper: number, accuracy: number }
+type Recipe = { id: string, name: string, format: 'vial' | 'syringe' | 'cartridge', volume: number[], diameter: number, stopper: number, accuracy: number, inspectionEvery?: number }
 export const PHARMA_RECIPES: Recipe[] = [
   { id: 'vial-2ml', name: 'Vial 2 mL', format: 'vial', volume: [2], diameter: 16, stopper: 13, accuracy: 0.1 },
+  { id: 'vial-2ml-sampled', name: 'Vial 2 mL - inspection every 5', format: 'vial', volume: [2], diameter: 16, stopper: 13, accuracy: 0.1, inspectionEvery: 5 },
   { id: 'vial-10ml', name: 'Vial 10 mL', format: 'vial', volume: [10], diameter: 24, stopper: 20, accuracy: 0.1 },
   { id: 'syringe-1ml', name: 'Prefilled syringe 1 mL', format: 'syringe', volume: [1], diameter: 8.15, stopper: 6.35, accuracy: 0.01 },
   { id: 'syringe-two-dose', name: 'Prefilled syringe — two doses', format: 'syringe', volume: [0.5, 0.5], diameter: 10.85, stopper: 8.65, accuracy: 0.01 },
@@ -182,8 +183,11 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
     })
     submodels.push(submodel(sm(recipe.id, 'parameters'), 'ProcessParameters', 'https://admin-shell-io/idta/SubmodelTemplate/ProcessParameters/1/0', [collection('Processes', processes, pp('Processes'))]),
       submodel(sm(recipe.id, 'capabilities'), 'CapabilityDescription', 'https://admin-shell.io/idta/SubmodelTemplate/CapabilityDescription/1/0', [collection('Capabilities', capabilities, cap('CapabilitySet'))]))
-    savePlan({ schema: 'process-sequence-plan/3.0', productAasId: aas(recipe.id), revision: 1, rootScopeId: 'product', scopes: [
-      { id: 'product', name: recipe.name, parentId: null, material: null, nodes },
+    const plannedNodes: PlanNode[] = nodes.map(node => node.id === 'Inspection' && recipe.inspectionEvery
+      ? { id: 'periodic-inspection', kind: 'conditional', name: 'Periodic inspection', condition: { kind: 'everyNthProduct', every: recipe.inspectionEvery }, nodes: [node] }
+      : node)
+    savePlan({ schema: recipe.inspectionEvery ? 'process-sequence-plan/4.0' : 'process-sequence-plan/3.0', productAasId: aas(recipe.id), revision: 1, rootScopeId: 'product', scopes: [
+      { id: 'product', name: recipe.name, parentId: null, material: null, nodes: plannedNodes },
       ...parts.map((part, index) => ({ id: `part-${index}`, name: part.name, parentId: 'product', nodes: [], planAasId: aas(part.id), material: { aasId: aas(recipe.id), submodelId: bomId, path: ['Product', `Part_${index}`], globalAssetId: `${PHARMA_BASE}/asset/${part.id}` } })),
     ] })
     shell(recipe.id, recipe.name, [bomId, sm(recipe.id, 'parameters'), sm(recipe.id, 'capabilities'), planId(aas(recipe.id))])

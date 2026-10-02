@@ -18,6 +18,8 @@
         <p class="text-body-small">The next step waits for this entire subprocess to complete.</p>
       </template>
 
+      <PlanCondition v-else-if="node.kind === 'conditional'" v-model="node" />
+
       <template v-else-if="node.kind === 'parallel'">
         <p class="text-body-small">All branches may run concurrently. The sequence continues when every branch completes. Resources may limit actual overlap.</p>
 
@@ -110,6 +112,7 @@
   import { materialLabels } from '../utils/planSources'
   import PlanBindings from './PlanBindings.vue'
   import PlanCapabilities from './PlanCapabilities.vue'
+  import PlanCondition from './PlanCondition.vue'
 
   const props = defineProps<{
     processes: PlanProcess[]

@@ -45,6 +45,29 @@ function fixture () {
 }
 
 describe('shared recursive assembly plans', () => {
+  it('retains an optional subprocess call when editing a shared assembly through its parent', async () => {
+    const { session, database } = fixture()
+    const parent = session().hierarchy
+    const view = await parent.load('robot', 'Robot')
+    const drive = view.scopes.find(scope => scope.name === 'Drive')!
+    const motor = view.scopes.find(scope => scope.name === 'Motor')!
+    const flow = newNode('conditional')
+    if (flow.kind !== 'conditional') {
+      throw new Error('Expected optional flow')
+    }
+    flow.nodes = [newNode('call', motor.id)]
+    drive.nodes = [flow, newNode('step')]
+    await parent.save(view)
+    expect(database.get('drive')!.schema).toBe('process-sequence-plan/4.0')
+    expect(database.get('robot')!.revision).toBe(1)
+    const direct = await session().hierarchy.load('drive', 'Drive')
+    expect(expandPlan(direct, direct.rootScopeId, 1)).toHaveLength(1)
+    expect(expandPlan(direct, direct.rootScopeId, 5)).toHaveLength(2)
+    const reopened = await session().hierarchy.load('robot', 'Robot')
+    expect(expandPlan(reopened, reopened.rootScopeId, 1)).toHaveLength(1)
+    expect(expandPlan(reopened, reopened.rootScopeId, 5)).toHaveLength(2)
+  })
+
   it('distinguishes a stored empty revision-zero plan from a missing definition', async () => {
     const { session, database } = fixture()
     const empty = newPlan('empty', 'Empty component')

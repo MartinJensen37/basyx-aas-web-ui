@@ -7,9 +7,11 @@ const plan = buildPharmaDemo(id => `${id}/sequence`).plans.find(plan => plan.pro
 const filling = plan.scopes[0].nodes.find(node => node.id === 'Filling_1')!
 plan.productAasId = 'urn:example:product'
 plan.revision = 0
+plan.schema = 'process-sequence-plan/4.0'
 plan.scopes = [
   { id: 'product', name: 'Product', parentId: null, material: null, nodes: [
     filling,
+    { id: 'optional', kind: 'conditional', name: 'Periodic inspection', condition: { kind: 'everyNthProduct', every: 5 }, nodes: [] },
     { id: 'call', kind: 'call', name: 'Subprocess', scopeId: 'subprocess' },
     { id: 'parallel', kind: 'parallel', name: 'Parallel work', branches: [
       { id: 'a', name: 'Branch A', nodes: [] }, { id: 'b', name: 'Branch B', nodes: [] },

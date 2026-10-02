@@ -107,3 +107,10 @@ Six station AASs provide format-specific capabilities and linked skills: loading
 The normal AAS viewer exposes **ProductionSequence ? Scopes ? Scope ? Steps** as collections and properties. Save draft writes this structure, including references to process inputs, required capabilities and station skills. The [AAS template](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/ProductionSequence.json) and [contract](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/README.md) document it.
 
 Seeding creates missing pharma objects and preserves existing objects and edits. The original robot parallel example remains available. Legacy robot JSON plans are converted to structured AAS elements without discarding the original attachment.
+
+
+### Periodic inspection
+
+Select **Vial 2 mL - inspection every 5** for a prepared optional inspection flow. Products 5, 10, 15, etc. take the inspection path; other products go directly to Unloading. Use **Combined steps ? Product number in run** to preview the difference. The original six recipes remain unchanged; seeding adds this seventh recipe and preserves existing edits.
+
+For any recipe, select an operation and choose **Make optional**, or add an **Optional flow** and place operations or subprocess calls in its Run path. Set the interval in the inspector. **Run every product** removes the wrapper without discarding its contents. The rule is saved in the native ProductionSequence submodel; an execution system must provide the product counter when running the plan.

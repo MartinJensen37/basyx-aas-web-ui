@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test'
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
 import { buildPharmaDemo, PHARMA_BASE, PHARMA_RECIPES } from '../../src/pages/modules/ProcessSequence/demo/pharma'
@@ -15,11 +16,9 @@ test.skip(!repository, 'Set PS_REPO_URL to a disposable BaSyx repository.')
 
 test.beforeAll(async ({ request }) => {
   for (const [collection, models] of [['submodels', fixture.submodels], ['shells', fixture.shells]] as const) {
-    for (let index = 0; index < models.length; index += 10) {
-      await Promise.all(models.slice(index, index + 10).map(async data => {
-        const response = await request.post(`${repository}/${collection}`, { data })
-        expect(response.ok(), await response.text()).toBe(true)
-      }))
+    for (const data of models) {
+      const response = await request.post(`${repository}/${collection}`, { data })
+      expect(response.ok(), await response.text()).toBe(true)
     }
   }
 })
@@ -29,30 +28,27 @@ test.afterAll(async ({ request }) => {
     return
   }
   for (const [collection, models] of [['shells', fixture.shells], ['submodels', fixture.submodels]] as const) {
-    for (let index = 0; index < models.length; index += 10) {
-      await Promise.all(models.slice(index, index + 10).map(async model => {
-        // A dev server can close idle pooled connections while the browser test runs.
-        // DELETE is idempotent, so a bounded transport retry is safe for fixture cleanup.
-        for (let attempt = 0; attempt < 3; attempt++) {
-          let response
-          try {
-            response = await request.delete(`${repository}/${collection}/${encode(model.id)}`, { timeout: 5000, maxRetries: 2 })
-          } catch (error) {
-            if (attempt === 2) {
-              throw error
-            }
-            continue
+    for (const model of models) {
+      // A dev server can close idle pooled connections while the browser test runs.
+      // DELETE is idempotent, so a bounded transport retry is safe for fixture cleanup.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let response
+        try {
+          response = await request.delete(`${repository}/${collection}/${encode(model.id)}`, { timeout: 5000, maxRetries: 2 })
+        } catch (error) {
+          if (attempt === 2) {
+            throw error
           }
-          expect(response.ok() || response.status() === 404).toBe(true)
-          break
+          continue
         }
-      }))
+        expect(response.ok() || response.status() === 404, `${collection}/${model.id}: ${response.status()} ${await response.text()}`).toBe(true)
+        break
+      }
     }
   }
 })
 
-test('reviews all pharma recipes, checks station limits and reads the native AAS sequence', async ({ page, request }) => {
-  test.setTimeout(180_000)
+async function openWorkspace (page: Page): Promise<void> {
   await page.setViewportSize({ width: 1720, height: 1080 })
   // Restrict the picker catalog to this test's objects while using the actual repository for every model.
   await page.route('**/shells?*', async route => {
@@ -73,6 +69,11 @@ test('reviews all pharma recipes, checks station limits and reads the native AAS
     }))
   }, repository!)
   await page.goto(toBaseScopedPath(normalizeBasePath(process.env.IT_BASE_PATH ?? '/ui/'), 'modules/processsequence'))
+}
+
+test('reviews all pharma recipes, checks station limits and reads the native AAS sequence', async ({ page, request }) => {
+  test.setTimeout(180_000)
+  await openWorkspace(page)
   for (const recipe of PHARMA_RECIPES) {
     const picker = page.getByRole('combobox', { name: 'Product to plan', exact: true })
     await expect(picker).toBeEnabled({ timeout: 60_000 })
@@ -105,4 +106,48 @@ test('reviews all pharma recipes, checks station limits and reads the native AAS
   await expect(page.getByText('Saved revision 0', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByText('Saved revision 0', { exact: true })).toBeVisible()
+})
+
+test('makes inspection optional, saves its interval and previews the inspection and skip paths', async ({ page, request }) => {
+  test.setTimeout(180_000)
+  await openWorkspace(page)
+  const picker = page.getByRole('combobox', { name: 'Product to plan', exact: true })
+  await expect(picker).toBeEnabled({ timeout: 60_000 })
+  await picker.fill('Vial 2 mL')
+  await page.getByRole('option', { name: 'Vial 2 mL', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Sequence name', exact: true })).toHaveValue('Vial 2 mL')
+  await page.getByRole('button', { name: 'Inspection', exact: true }).click()
+  await page.getByRole('button', { name: 'Make optional', exact: true }).click()
+  const interval = page.getByRole('spinbutton', { name: 'Run every N products', exact: true })
+  await expect(interval).toHaveValue('5')
+  await interval.fill('0')
+  await expect(page.getByText('Enter a positive whole number of products.', { exact: true })).toBeVisible()
+  await interval.fill('7')
+  await expect(page.getByText('Every 7 products', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Skip this flow', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
+  const endpoint = `${repository}/submodels/${encode(planId(`${prefix}/aas/vial-2ml`))}`
+  const stored = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  expect(stored.schema).toBe('process-sequence-plan/4.0')
+  expect(stored.scopes[0].nodes.find(node => node.kind === 'conditional')).toMatchObject({ condition: { kind: 'everyNthProduct', every: 7 }, nodes: [{ name: 'Inspection', resourceAasId: `${prefix}/aas/inspection-station` }] })
+  await page.getByRole('button', { name: 'Combined steps', exact: true }).click()
+  const number = page.getByRole('spinbutton', { name: 'Product number in run', exact: true })
+  await expect(page.getByRole('row', { name: /^\d+\. Inspection / })).toHaveCount(0)
+  await expect(page.getByRole('row', { name: /^6\. Unloading / })).toBeVisible()
+  await number.fill('7')
+  await expect(page.getByRole('row', { name: /^6\. Inspection / })).toBeVisible()
+  await number.fill('8')
+  await expect(page.getByRole('row', { name: /^\d+\. Inspection / })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Edit sequence', exact: true }).click()
+  await page.getByRole('button', { name: 'Reload plans', exact: true }).click()
+  await page.getByRole('button', { name: 'Optional Inspection', exact: true }).click()
+  await expect(interval).toHaveValue('7')
+  await page.getByRole('button', { name: 'Run every product', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Skip this flow', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
+  const restored = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  expect(restored.scopes[0].nodes.some(node => node.kind === 'conditional')).toBe(false)
+  expect(restored.scopes[0].nodes.find(node => node.id === 'Inspection')).toMatchObject({ name: 'Inspection', process: { processId: 'Inspection' } })
 })

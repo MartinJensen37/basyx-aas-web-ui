@@ -38,7 +38,8 @@ export type StepNode = {
 }
 export type CallNode = { id: string, kind: 'call', name: string, scopeId: string }
 export type ParallelNode = { id: string, kind: 'parallel', name: string, branches: PlanBranch[] }
-export type PlanNode = StepNode | CallNode | ParallelNode
+export type ConditionalNode = { id: string, kind: 'conditional', name: string, condition: { kind: 'everyNthProduct', every: number }, nodes: PlanNode[] }
+export type PlanNode = StepNode | CallNode | ParallelNode | ConditionalNode
 export type PlanBranch = { id: string, name: string, nodes: PlanNode[] }
 
 const nodeSchema: z.ZodType<PlanNode> = z.lazy(() => z.discriminatedUnion('kind', [
@@ -54,10 +55,15 @@ const nodeSchema: z.ZodType<PlanNode> = z.lazy(() => z.discriminatedUnion('kind'
     id: z.string().min(1), kind: z.literal('parallel'), name: z.string(),
     branches: z.array(z.object({ id: z.string(), name: z.string(), nodes: z.array(nodeSchema) })).min(2),
   }),
+  z.object({
+    id: z.string().min(1), kind: z.literal('conditional'), name: z.string(),
+    condition: z.object({ kind: z.literal('everyNthProduct'), every: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) }),
+    nodes: z.array(nodeSchema),
+  }),
 ]))
 
 export const planSchema = z.object({
-  schema: z.enum(['process-sequence-plan/2.0', 'process-sequence-plan/3.0']),
+  schema: z.enum(['process-sequence-plan/2.0', 'process-sequence-plan/3.0', 'process-sequence-plan/4.0']),
   productAasId: z.string().min(1),
   revision: z.number().int().nonnegative(),
   rootScopeId: z.string(),

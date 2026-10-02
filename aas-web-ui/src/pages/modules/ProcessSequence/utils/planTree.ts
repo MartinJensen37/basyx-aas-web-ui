@@ -29,6 +29,9 @@ export function extractAssembly (plan: ProcessPlan, rootId: string, aasId: strin
           check(branch.nodes)
         }
       }
+      if (node.kind === 'conditional') {
+        check(node.nodes)
+      }
     }
   }
   for (const scope of scopes) {

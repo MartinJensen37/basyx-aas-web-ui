@@ -2,7 +2,7 @@
 
 Open `/modules/processsequence` without selecting a submodel. **Product to plan** lists AASs with the exact IDTA 02031-1 Process Parameters Type semantic ID. Names and arbitrary files do not qualify a product.
 
-The left tree selects a product, material occurrence or subprocess. The graph contains ordered operations, subprocess calls and parallel branches with an all-branches join. Selecting a node opens process parameters, material references, capability requirements and station/skill bindings in the inspector. **Combined steps** expands calls and shows precedence. Cyclic calls are rejected.
+The left tree selects a product, material occurrence or subprocess. The graph contains ordered operations, subprocess calls and parallel branches with an all-branches join, and optional flows with a Run/Skip choice. Selecting a node opens process parameters, material references, capability requirements and station/skill bindings in the inspector. **Combined steps** expands calls and shows precedence for a chosen product number. Cyclic calls are rejected.
 
 Each assembly AAS owns one canonical sequence. A parent material occurrence references that owner; it does not duplicate the child steps. Editing an assembly directly or through its parent saves the same definition. Missing sequences start empty. Shared parts can occur in several products. Save before changing product; browser drafts recover quietly within the same tab. **Reload plans** archives the current browser draft and loads the server version. There are no draft-download reminders or BPMN editor.
 
@@ -45,3 +45,14 @@ pnpm exec vitest run src/pages/modules/ProcessSequence tests/pages/modules/Proce
 ```
 
 Browser tests use the current checkout UI and a disposable repository: set `IT_DISABLE_WEBSERVER=true`, `IT_PORT=3000`, `IT_BASE_PATH=/`, `PS_REPO_URL=http://localhost:8081`, and optionally `IT_BROWSER_CHANNEL=chrome`; run `pnpm exec playwright test tests/integration/process-plan.pw.ts tests/integration/process-hierarchy.pw.ts tests/integration/process-pharma.pw.ts --project integration-core`.
+
+
+## Periodic inspection and optional flows
+
+Select an inspection step and choose **Make optional**. Set **Run every N products** to 5 to inspect products 5, 10, 15, etc. in each production run. The graph shows the inspection path and a skip path that rejoins before the next operation. **Run every product** removes the condition and preserves its operations. **Optional flow** in the toolbar creates an empty conditional flow; select **Run this flow** to add steps or subprocess calls inside it. Parallel groups and nested optional flows are also supported.
+
+The product number is one-based and belongs to the current production run. Every called subprocess receives the same product number; entering a subprocess or retrying an operation does not advance the counter. Nested intervals must both match. This is a plan definition: the execution system must supply and preserve the product ordinal across retries and reset it when starting a new run. No live equipment counter is simulated by the editor.
+
+In **Combined steps**, change **Product number in run** to preview both paths. Skipped operations do not become required predecessors. The saved condition is an AAS collection with semantic IDs for ConditionType, EveryNProducts and CounterScope. Definitions containing optional flows use PlanSchema `process-sequence-plan/4.0`; older 2.0/3.0 plans remain readable. See the template contract for details.
+
+The prepared **Vial 2 mL - inspection every 5** recipe demonstrates this flow without changing the existing recipes.
