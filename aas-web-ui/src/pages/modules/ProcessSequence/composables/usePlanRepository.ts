@@ -7,8 +7,6 @@ import { base64Encode } from '@/utils/EncodeDecodeUtils'
 import { newPlan, parsePlan } from '../utils/plan'
 import { buildSequenceSubmodel, readSequenceSubmodel, SEQUENCE_SEMANTIC_ID } from '../utils/sequenceModel'
 
-export const PLAN_SEMANTIC_ID = 'https://smartproductionlab.aau.dk/SubmodelTemplate/ProcessSequence/2/0'
-
 export function planSubmodelId (productAasId: string): string {
   return `https://smartproductionlab.aau.dk/sm/process-plan/${base64Encode(productAasId)}`
 }

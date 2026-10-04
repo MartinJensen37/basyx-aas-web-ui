@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canCall, expandPlan, mergeScopes, newNode, newPlan, parsePlan, structuralIssues } from './plan'
+import { canCall, expandPlan, newNode, newPlan, parsePlan, structuralIssues } from './plan'
 import { readMaterialScopes, readPlanProcesses } from './planSources'
 
 describe('assembly process plans', () => {
@@ -48,7 +48,7 @@ describe('assembly process plans', () => {
     expect(structuralIssues(plan).join(',')).toContain('hierarchy contains a cycle')
   })
 
-  it('retains separate occurrences of the same asset and preserves edits when sources refresh', () => {
+  it('retains separate material occurrences of the same asset', () => {
     const entity = (idShort: string) => ({ modelType: 'Entity', idShort, globalAssetId: 'urn:motor', statements: [] })
     const submodel = {
       id: 'urn:bom', submodelElements: [{ modelType: 'Entity', idShort: 'Product', statements: [entity('Left'), entity('Right')] }],
@@ -56,12 +56,7 @@ describe('assembly process plans', () => {
     const scopes = readMaterialScopes(submodel, 'urn:product', 'product')
     expect(scopes[0].id).not.toBe(scopes[1].id)
     expect(scopes[0].material?.path).toEqual(['Product', 'Left'])
-    const plan = newPlan('urn:product', 'Product')
-    mergeScopes(plan, scopes)
-    plan.scopes[1].nodes.push(newNode('step'))
-    mergeScopes(plan, readMaterialScopes(submodel, 'urn:product', 'product'))
-    expect(plan.scopes).toHaveLength(3)
-    expect(plan.scopes[1].nodes).toHaveLength(1)
+    expect(scopes[1].material?.path).toEqual(['Product', 'Right'])
   })
 
   it('reads all parameter groups and ProcessBoM without requiring numbered process names', () => {

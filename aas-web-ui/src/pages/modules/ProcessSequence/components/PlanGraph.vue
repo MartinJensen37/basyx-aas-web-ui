@@ -64,7 +64,7 @@
 
         <template #node-plan="{ data, id }">
           <PlanGraphNode
-            :active="data.planId ? data.planId === selectedId : id === insertionId"
+            :active="data.planId ? data.planId === selectedId : !selectedId && id === insertionId"
             :data="data"
             @open="emit('open', $event)"
             @select="select(id, data)"

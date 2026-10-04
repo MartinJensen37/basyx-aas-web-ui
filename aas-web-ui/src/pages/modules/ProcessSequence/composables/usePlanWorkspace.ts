@@ -63,7 +63,7 @@ export function usePlanWorkspace () {
       return
     }
     try {
-      const synchronized = hierarchy.synchronize(structuredClone(toRaw(plan.value)))
+      const synchronized = hierarchy.synchronize(parsePlan(JSON.stringify(plan.value), plan.value.productAasId))
       if (JSON.stringify(synchronized) !== JSON.stringify(plan.value)) {
         const selected = hierarchy.remappedIds.get(selectedScopeId.value) ?? selectedScopeId.value
         plan.value = synchronized
@@ -178,14 +178,16 @@ export function usePlanWorkspace () {
   }
 
   async function save (): Promise<void> {
-    if (!plan.value) {
+    if (!plan.value || saving.value) {
       return
     }
-    const snapshot = structuredClone(toRaw(plan.value))
     const session = hierarchy
     const ticket = generation
     saving.value = true
+    message.value = ''
     try {
+      // JSON snapshots also detach reactive references nested inside skill bindings.
+      const snapshot = parsePlan(JSON.stringify(plan.value), plan.value.productAasId)
       const saved = await session.save(snapshot)
       if (ticket === generation) {
         plan.value = saved

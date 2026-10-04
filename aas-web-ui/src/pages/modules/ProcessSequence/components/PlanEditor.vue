@@ -1,5 +1,5 @@
 <template>
-  <v-empty-state v-if="!product?.id" icon="mdi-package-variant-closed" text="Select a product in the AAS viewer to plan its assembly processes." title="Select a product" />
+  <v-empty-state v-if="!product?.id" icon="mdi-package-variant-closed" text="Choose a product above to open or create its process sequence." title="Select a product" />
   <v-progress-linear v-else-if="loading" aria-label="Loading process plan" indeterminate />
 
   <v-alert v-else-if="error" type="error">

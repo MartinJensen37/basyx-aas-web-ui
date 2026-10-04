@@ -1,4 +1,4 @@
-import type { PlanBranch, PlanNode, PlanScope, ProcessPlan, StepNode } from '../types/plan'
+import type { PlanBranch, PlanNode, ProcessPlan, StepNode } from '../types/plan'
 import { v4 } from 'uuid'
 import { planSchema } from '../types/plan'
 
@@ -150,15 +150,6 @@ export function planningNotes (plan: ProcessPlan): string[] {
     }
   }
   return notes
-}
-
-/** Source refresh adds occurrences, but never replaces sequences already authored for them. */
-export function mergeScopes (plan: ProcessPlan, incoming: PlanScope[]): void {
-  for (const scope of incoming) {
-    if (!plan.scopes.some(existing => existing.id === scope.id)) {
-      plan.scopes.push(scope)
-    }
-  }
 }
 
 export type ExpandedStep = { id: string, scopeId: string, step: StepNode, after: string[] }
