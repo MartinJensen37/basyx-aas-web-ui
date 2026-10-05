@@ -131,27 +131,6 @@ export function canCall (plan: ProcessPlan, from: string, target: string): boole
   return !reaches(target)
 }
 
-export function planningNotes (plan: ProcessPlan): string[] {
-  const notes = structuralIssues(plan)
-  for (const scope of plan.scopes) {
-    for (const node of flattenNodes(scope.nodes)) {
-      if (node.kind === 'step' && node.executionMode !== 'manual' && (!node.resourceAasId || !node.skillId)) {
-        notes.push(`${scope.name} / ${node.name}: resource skill not assigned.`)
-      }
-      if (node.kind === 'call' && !plan.scopes.find(item => item.id === node.scopeId)?.nodes.length) {
-        notes.push(`${scope.name} / ${node.name}: subprocess is empty.`)
-      }
-      if (node.kind === 'parallel' && node.branches.some(branch => branch.nodes.length === 0)) {
-        notes.push(`${scope.name} / ${node.name}: a parallel branch is empty.`)
-      }
-      if (node.kind === 'conditional' && node.nodes.length === 0) {
-        notes.push(`${scope.name} / ${node.name}: optional flow is empty.`)
-      }
-    }
-  }
-  return notes
-}
-
 export type ExpandedStep = { id: string, scopeId: string, step: StepNode, after: string[] }
 
 /** Expand calls per invocation and preserve all branch prerequisites at a join. No scheduling is implied. */

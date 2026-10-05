@@ -2,18 +2,23 @@
   <div>
     <v-autocomplete
       v-model="node.resourceAasId"
+      class="mb-3"
       clearable
       density="compact"
+      hide-details="auto"
       item-title="name"
       item-value="id"
-      :items="resources"
-      label="Resource (optional while planning)"
+      :items="[{ id: '', name: 'No resource' }, ...resources]"
+      label="Resource (optional)"
       @update:model-value="resetResource"
     />
 
     <v-select
+      v-if="node.resourceAasId"
+      class="mb-3"
       density="compact"
       :disabled="!node.resourceAasId || loading"
+      hide-details="auto"
       item-title="name"
       item-value="idShort"
       :items="skills"
@@ -47,7 +52,6 @@
         label="Constant value"
       />
 
-      <div v-else class="text-caption mt-1">The source value is resolved for execution.</div>
     </div>
   </div>
 </template>

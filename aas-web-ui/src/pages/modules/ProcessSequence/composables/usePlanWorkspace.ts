@@ -2,7 +2,7 @@ import type { PlanNode, PlanProcess, ProcessPlan } from '../types/plan'
 import { v4 } from 'uuid'
 import { useAASStore } from '@/store/AASDataStore'
 import { useInfrastructureStore } from '@/store/InfrastructureStore'
-import { canCall, flattenNodes, parsePlan, planningNotes } from '../utils/plan'
+import { canCall, flattenNodes, parsePlan } from '../utils/plan'
 import { createPlanHierarchy } from '../utils/planHierarchy'
 import { usePlanRepository } from './usePlanRepository'
 import { usePlanSources } from './usePlanSources'
@@ -39,7 +39,6 @@ export function usePlanWorkspace () {
   })
   const targets = computed(() => plan.value?.scopes.filter(item => hierarchy.canTarget(selectedScopeId.value, item.id)
     && canCall(plan.value!, selectedScopeId.value, item.id)) ?? [])
-  const notes = computed(() => plan.value ? planningNotes(plan.value) : [])
   const ownerName = computed(() => {
     if (!scope.value) {
       return ''
@@ -219,7 +218,7 @@ export function usePlanWorkspace () {
 
   return {
     plan, product, scope, selectedScopeId, selectedNodeId, selectedNode, loading, saving,
-    error, message, dirty, targets, availableProcesses, resources, notes, breadcrumb, ownerName,
+    error, message, dirty, targets, availableProcesses, resources, breadcrumb, ownerName,
     initialize, reload, addSubprocess, save, download,
   }
 }

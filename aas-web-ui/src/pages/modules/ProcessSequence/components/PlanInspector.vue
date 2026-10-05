@@ -3,9 +3,15 @@
     <v-card-title class="text-body-large">{{ node ? 'Selection details' : 'Sequence details' }}</v-card-title>
 
     <v-card-text v-if="node">
-      <v-text-field v-model="node.name" density="compact" label="Name" />
+      <v-text-field
+        v-model="node.name"
+        class="mb-3"
+        density="compact"
+        hide-details="auto"
+        label="Name"
+      />
 
-      <template v-if="node.kind === 'call'">
+      <InspectorSection v-if="node.kind === 'call'" help="The next step waits for this entire subprocess to complete." title="Subprocess">
         <v-select
           v-model="node.scopeId"
           density="compact"
@@ -15,13 +21,11 @@
           label="Subprocess definition"
         />
 
-        <p class="text-body-small">The next step waits for this entire subprocess to complete.</p>
-      </template>
+      </InspectorSection>
 
       <PlanCondition v-else-if="node.kind === 'conditional'" v-model="node" />
 
-      <template v-else-if="node.kind === 'parallel'">
-        <p class="text-body-small">All branches may run concurrently. The sequence continues when every branch completes. Resources may limit actual overlap.</p>
+      <InspectorSection v-else-if="node.kind === 'parallel'" color="warning" help="All branches start together and join before the next step. Select a branch on the graph to insert operations. Only empty extra branches can be removed." title="Parallel branches">
 
         <div v-for="(branch, index) in node.branches" :key="branch.id" class="d-flex align-center ga-1 mt-3">
           <v-text-field v-model="branch.name" density="compact" hide-details :label="`Branch ${index + 1} name`" />
@@ -37,91 +41,66 @@
         </div>
 
         <v-btn class="mt-3" size="small" variant="tonal" @click="node.branches.push(newBranch(`Branch ${node.branches.length + 1}`))">Add branch</v-btn>
-        <p class="text-caption mt-2">Select a branch on the graph to insert its first step. Empty extra branches can be removed.</p>
-      </template>
+      </InspectorSection>
 
       <template v-else>
-        <v-select
-          clearable
-          density="compact"
-          item-title="name"
-          item-value="key"
-          :items="processOptions"
-          label="Process Parameters entry"
-          :model-value="node.process ? JSON.stringify(node.process.source) : null"
-          @update:model-value="linkProcess"
-        />
+        <InspectorSection help="Select process inputs from the Process Parameters submodel. Values are snapshots; source references and datatypes are available on hover." title="Process inputs">
+          <v-select
+            class="mb-3"
+            clearable
+            density="compact"
+            hide-details="auto"
+            item-title="name"
+            item-value="key"
+            :items="processOptions"
+            label="Process Parameters entry"
+            :model-value="node.process ? JSON.stringify(node.process.source) : null"
+            @update:model-value="linkProcess"
+          />
 
-        <div v-if="node.process" class="mb-4">
-          <div class="text-caption mb-2">Process ID: {{ node.process.processId }}</div>
-
-          <v-expansion-panels variant="accordion">
-            <v-expansion-panel v-for="group in groups" :key="group" :title="group.replace(/([a-z])([A-Z])/g, '$1 $2')">
-              <v-expansion-panel-text>
-                <div v-for="parameter in node.process.parameters.filter(item => item.group === group)" :key="JSON.stringify(parameter.source)" class="mb-2">
-                  <div class="text-body-small">{{ parameter.name }}: {{ parameter.value || 'Not set' }}</div>
-                  <div class="text-caption text-medium-emphasis">{{ parameter.dataType }}</div>
-                </div>
-
-                <div v-if="!node.process.parameters.some(item => item.group === group)" class="text-caption">No parameters provided.</div>
-              </v-expansion-panel-text>
-            </v-expansion-panel>
-
-            <v-expansion-panel title="Process materials">
-              <v-expansion-panel-text>
-                <p v-if="node.process.material.length === 0" class="text-caption">No materials specified for this process.</p>
-                <div v-for="(material, index) in materialLabels(node.process.material)" :key="index" class="text-body-small mb-2">{{ material }}</div>
-              </v-expansion-panel-text>
-            </v-expansion-panel>
-          </v-expansion-panels>
-        </div>
+          <PlanParameters v-if="node.process" :process="node.process" />
+        </InspectorSection>
 
         <PlanCapabilities v-model="node" :inherited="inheritedRequirements" :resources="resources" />
 
-        <v-select
-          density="compact"
-          :items="[{ title: 'Station skill', value: 'station' }, { title: 'Manual operation', value: 'manual' }]"
-          label="Execution"
-          :model-value="node.executionMode ?? 'station'"
-          @update:model-value="setExecution"
-        />
+        <InspectorSection color="info" help="Assign one station skill, choose a manual operation, or leave the resource unassigned until later. Capability matching compares all available resources." title="Resource assignment">
+          <v-select
+            class="mb-3"
+            density="compact"
+            hide-details="auto"
+            :items="[{ title: 'Station skill', value: 'station' }, { title: 'Manual operation', value: 'manual' }]"
+            label="Execution"
+            :model-value="node.executionMode ?? 'station'"
+            @update:model-value="setExecution"
+          />
 
-        <PlanBindings v-if="node.executionMode !== 'manual'" :key="node.id" v-model="node" :resources="resources" />
+          <PlanBindings v-if="node.executionMode !== 'manual'" :key="node.id" v-model="node" :resources="resources" />
+        </InspectorSection>
       </template>
     </v-card-text>
 
     <v-card-text v-else>
-      <p class="text-body-small">Select a step to link its process inputs and resource skill. Add subprocess calls to compose assembly sequences.</p>
-      <p class="text-body-small mt-3">Processes are available as inputs; their source order does not determine the sequence.</p>
+      <p class="text-body-small text-medium-emphasis">Select a node to view its details.</p>
     </v-card-text>
 
-    <v-divider />
-    <v-card-subtitle class="pt-3">Planning checks</v-card-subtitle>
-
-    <v-card-text>
-      <div v-for="note in notes" :key="note" class="text-body-small mb-2">{{ note }}</div>
-      <p v-if="notes.length === 0" class="text-body-small">No missing assignments found.</p>
-      <p class="text-caption text-medium-emphasis mt-3">Saving keeps your draft. Readiness for execution has not been verified.</p>
-    </v-card-text>
   </v-card>
 </template>
 
 <script setup lang="ts">
   import type { PlanNode, PlanProcess } from '../types/plan'
   import { newBranch } from '../utils/plan'
-  import { materialLabels } from '../utils/planSources'
+  import InspectorSection from './InspectorSection.vue'
   import PlanBindings from './PlanBindings.vue'
   import PlanCapabilities from './PlanCapabilities.vue'
   import PlanCondition from './PlanCondition.vue'
+  import PlanParameters from './PlanParameters.vue'
 
   const props = defineProps<{
     processes: PlanProcess[]
     targets: { id: string, name: string }[]
     resources: { id: string, name: string }[]
-    notes: string[]
   }>()
   const node = defineModel<PlanNode | undefined>()
-  const groups = ['ProductParameters', 'ProcessParameters', 'ResourceParameters']
   const inheritedRequirements = computed(() => {
     const process = node.value?.kind === 'step' ? node.value.process : null
     return process?.requiredCapabilities ?? props.processes.find(item => JSON.stringify(item.source) === JSON.stringify(process?.source))?.requiredCapabilities ?? []

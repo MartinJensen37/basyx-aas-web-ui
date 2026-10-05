@@ -10,6 +10,13 @@ const prefix = `urn:pharma:test:${Date.now()}`
 const encode = (value: string) => Buffer.from(value).toString('base64url')
 const planId = (value: string) => `https://smartproductionlab.aau.dk/sm/process-plan/${encode(value)}`
 const original = buildPharmaDemo(id => planId(id.replace(PHARMA_BASE, prefix)))
+const fillingStation = original.shells.find(shell => shell.id.endsWith('/aas/filling-station'))!
+const backup = JSON.parse(JSON.stringify({
+  shell: fillingStation,
+  submodels: original.submodels.filter(model => fillingStation.submodels.some((reference: { keys: { value: string }[] }) => reference.keys[0].value === model.id)),
+}).replaceAll('/filling-station', '/backup-filling-station').replaceAll('Filling station', 'Backup filling station'))
+original.shells.push(backup.shell)
+original.submodels.push(...backup.submodels)
 const fixture = JSON.parse(JSON.stringify(original).replaceAll(PHARMA_BASE, prefix)) as typeof original
 test.use({ channel: process.env.IT_BROWSER_CHANNEL || undefined, video: 'off' })
 test.skip(!repository, 'Set PS_REPO_URL to a disposable BaSyx repository.')
@@ -84,11 +91,12 @@ test('reviews all pharma recipes, checks station limits and reads the native AAS
     await expect(page.getByRole('button', { name: 'Capping', exact: true })).toHaveCount(recipe.format === 'vial' ? 1 : 0)
     const fillName = recipe.volume.length === 2 ? 'Filling — dose 2' : 'Filling'
     await page.getByRole('button', { name: fillName, exact: true }).click()
-    const comparison = page.getByRole('button', { name: /Filling station.*Within declared limits/ })
-    await expect(comparison).toBeVisible({ timeout: 30_000 })
-    await comparison.click()
+    await page.getByRole('button', { name: 'Match resources', exact: true }).click()
+    const comparison = page.getByLabel('Filling station', { exact: true })
+    await expect(comparison.getByText('Within declared limits', { exact: true })).toBeVisible({ timeout: 30_000 })
+    await comparison.getByRole('button', { name: 'Comparison details', exact: true }).click()
     await expect(page.getByText(new RegExp(`FillVolume: required ${recipe.volume.at(-1)}`))).toBeVisible()
-    await page.getByRole('button', { name: 'Use matching station skill', exact: true }).click()
+    await page.getByRole('button', { name: 'Use Filling station', exact: true }).click()
     await expect(page.getByText(`Filling ${recipe.format}`, { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Complete', exact: true })).toHaveAttribute('aria-pressed', 'false')
     await page.getByRole('button', { name: 'Save draft', exact: true }).click()
@@ -153,4 +161,37 @@ test('makes inspection optional, saves its interval and previews the inspection 
   const restored = readSequenceSubmodel(await (await request.get(endpoint)).json())
   expect(restored.scopes[0].nodes.some(node => node.kind === 'conditional')).toBe(false)
   expect(restored.scopes[0].nodes.find(node => node.id === 'Inspection')).toMatchObject({ name: 'Inspection', process: { processId: 'Inspection' } })
+})
+
+test('chooses between matching resources and persists an unassigned step', async ({ page, request }) => {
+  test.setTimeout(180_000)
+  await openWorkspace(page)
+  const picker = page.getByRole('combobox', { name: 'Product to plan', exact: true })
+  await expect(picker).toBeEnabled({ timeout: 60_000 })
+  await picker.fill('Vial 2 mL')
+  await page.getByRole('option', { name: 'Vial 2 mL', exact: true }).click()
+  await page.getByRole('button', { name: 'Filling', exact: true }).click()
+  await expect(page.getByText('Planning checks', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Match resources', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Use Filling station', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Use Backup filling station', exact: true }).click()
+  const resource = page.getByRole('combobox', { name: 'Resource (optional)', exact: true })
+  await expect(resource).toHaveValue('Backup filling station')
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
+  const endpoint = `${repository}/submodels/${encode(planId(`${prefix}/aas/vial-2ml`))}`
+  const assigned = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  expect(assigned.scopes[0].nodes.find(node => node.id === 'Filling_1')).toMatchObject({ resourceAasId: `${prefix}/aas/backup-filling-station` })
+  await resource.fill('No resource')
+  await page.getByRole('option', { name: 'No resource', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Resource skill', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
+  const cleared = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  const step = cleared.scopes[0].nodes.find(node => node.id === 'Filling_1')!
+  expect(step).toMatchObject({ resourceAasId: '', skillId: '', bindings: [] })
+  expect(step).not.toHaveProperty('skillReference')
+  await page.getByRole('button', { name: 'Reload plans', exact: true }).click()
+  await page.getByRole('button', { name: 'Filling', exact: true }).click()
+  await expect(resource).toHaveValue('No resource')
 })

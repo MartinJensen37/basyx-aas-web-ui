@@ -28,6 +28,10 @@ A required scalar must lie within an offered numeric interval. A required interv
 
 The inspector shows station comparisons and can assign a skill through the capability's `CapabilityRealizedBy` relationship. A step can inherit process requirements or override them; an explicit empty override removes requirements for that occurrence. Manual operations have no station assignment.
 
+The blue **Match resources** button in the Capabilities box opens a chooser for all candidate stations. Each match has a visible **Use resource** button; **Comparison details** expands its property checks. When several stations match, choose one explicitly. The plan stores one selected resource/skill per step; it does not store an alternative-resource pool or schedule by station availability. Assignment requires a single skill linked to all matched capabilities. **No resource** clears the assignment, skill reference and bindings, and can be saved for later planning.
+
+Selection details group product, process and resource parameters by color. Section help, parameter datatypes and capability reference paths are available in tooltips. Planning-check summaries are omitted from the panel; structural validation still runs when saving.
+
 ## Persistence and integration
 
 Only this module, its tests and the example environment implement this feature. `index.vue` uses the existing module metadata/autodiscovery convention. The application router, stores, viewers and root build configuration are unchanged. The optional Docker dev optimizer is contained in `dev/vite.config.mts`.

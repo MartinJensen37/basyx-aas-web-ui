@@ -83,7 +83,6 @@
         <template #right>
           <PlanInspector
             v-model="selectedNode"
-            :notes="notes"
             :processes="availableProcesses"
             :resources="resources"
             :targets="targets"
@@ -122,7 +121,7 @@
   const overview = ref(false)
   const {
     plan, product, scope, selectedScopeId, selectedNodeId, selectedNode, loading, saving,
-    error, message, dirty, targets, availableProcesses, resources, notes, breadcrumb, ownerName,
+    error, message, dirty, targets, availableProcesses, resources, breadcrumb, ownerName,
     reload, addSubprocess, save, download,
   } = usePlanWorkspace()
 

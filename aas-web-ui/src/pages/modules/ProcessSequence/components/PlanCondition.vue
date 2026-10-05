@@ -1,5 +1,5 @@
 <template>
-  <section aria-label="Optional flow condition">
+  <InspectorSection help="Products are counted from 1 within the production run, including subprocesses. Other products skip this flow. Select Run this flow on the graph to add operations." title="Optional flow condition">
     <v-text-field
       v-model="interval"
       density="compact"
@@ -10,13 +10,13 @@
       type="number"
     />
 
-    <p class="text-body-small">Current rule: run on products {{ examples }} in each production run. All other products follow the skip path.</p>
-    <p class="text-caption mt-2">Select Run this flow on the graph to add operations or a subprocess call. The next operation continues after the selected path completes.</p>
-  </section>
+    <p class="text-caption">Runs on products {{ examples }}, …</p>
+  </InspectorSection>
 </template>
 
 <script setup lang="ts">
   import type { ConditionalNode } from '../types/plan'
+  import InspectorSection from './InspectorSection.vue'
 
   const node = defineModel<ConditionalNode>({ required: true })
   const interval = ref(String(node.value.condition.every))
