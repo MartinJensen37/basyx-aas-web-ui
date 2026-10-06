@@ -1,5 +1,6 @@
 <template>
   <PlanChoice
+    color="teal"
     :compact="compact"
     :context="node.name"
     :items="items"

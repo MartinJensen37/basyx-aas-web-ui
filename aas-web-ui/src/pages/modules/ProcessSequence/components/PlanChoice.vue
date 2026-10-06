@@ -5,12 +5,13 @@
         v-bind="activator"
         append-icon="mdi-chevron-down"
         :aria-label="`${label} for ${context}`"
-        block
         class="justify-space-between text-none px-2"
-        color="primary"
+        :color="color"
         :disabled="items.length === 0"
+        max-width="100%"
+        rounded="pill"
         size="small"
-        variant="text"
+        variant="tonal"
       >
         <span class="text-truncate">{{ items.find(item => item.value === modelValue)?.title || label }}</span>
       </v-btn>
@@ -42,6 +43,6 @@
 </template>
 
 <script setup lang="ts">
-  withDefaults(defineProps<{ label: string, context?: string, compact?: boolean, items: { title: string, value: string, disabled?: boolean }[] }>(), { compact: false, context: '' })
+  withDefaults(defineProps<{ label: string, color?: string, context?: string, compact?: boolean, items: { title: string, value: string, disabled?: boolean }[] }>(), { compact: false, context: '', color: 'primary' })
   const modelValue = defineModel<string>({ required: true })
 </script>

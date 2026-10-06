@@ -2,13 +2,22 @@
   <div class="plan-graph-node" :class="[`plan-graph-node--${data.kind}`, { 'plan-graph-node--selected': active }]" :style="{ height: `${data.height ?? graphNodeHeight[data.kind]}px` }" @click.capture="node && emit('select')">
     <Handle v-if="data.kind !== 'start'" id="flow-in" :position="Position.Top" type="target" />
 
-    <PlanNodeType
-      v-if="node"
-      class="nodrag nopan nowheel mx-2 mt-1"
-      compact
-      :node="node"
-      @change="emit('change-type', $event)"
-    />
+    <div v-if="node" class="node-choices d-flex flex-wrap align-center ga-1 px-2 pt-2 nodrag nopan nowheel">
+      <PlanNodeType compact :node="node" @change="emit('change-type', $event)" />
+      <PlanOperationType v-if="node.kind === 'step'" compact :node="node" :processes="processes" />
+
+      <PlanChoice
+        v-else-if="node.kind === 'call'"
+        v-model="node.scopeId"
+        color="teal"
+        compact
+        :context="node.name"
+        :items="targets.map(target => ({ title: target.name, value: target.id }))"
+        label="Subprocess definition"
+      />
+
+      <PlanConditionKind v-else-if="node.kind === 'decision' || node.kind === 'conditional'" v-model="node.condition" compact :context="node.name" />
+    </div>
 
     <button :aria-label="data.title" :aria-pressed="active" class="node-button nodrag" @click="emit('select')">
       <span v-if="!compact && !node" class="node-category text-uppercase d-flex align-center ga-2">
@@ -16,27 +25,12 @@
       </span>
 
       <span class="node-title font-weight-medium"><v-icon v-if="compact" class="mr-1" :icon="icon" size="16" />{{ data.title }}</span>
-
     </button>
 
-    <div v-if="node" class="nodrag nopan nowheel mx-2 mb-1">
-      <PlanOperationType v-if="node.kind === 'step'" compact :node="node" :processes="processes" />
-
-      <PlanChoice
-        v-else-if="node.kind === 'call'"
-        v-model="node.scopeId"
-        compact
-        :context="node.name"
-        :items="targets.map(target => ({ title: target.name, value: target.id }))"
-        label="Subprocess definition"
-      />
-
-      <template v-else-if="node.kind === 'decision' || node.kind === 'conditional'">
-        <PlanConditionKind v-model="node.condition" compact :context="node.name" />
-        <div class="text-caption text-truncate px-2" :title="data.details || data.subtitle">{{ data.subtitle }}</div>
-        <Handle v-if="node.condition.kind === 'comparison' && node.condition.operand?.kind === 'output'" id="condition-input" :position="Position.Right" type="target" />
-      </template>
-    </div>
+    <template v-if="node?.kind === 'decision' || node?.kind === 'conditional'">
+      <div class="text-caption text-truncate px-3 pb-2" :title="data.details || data.subtitle">{{ data.subtitle }}</div>
+      <Handle v-if="node.condition.kind === 'comparison' && node.condition.operand?.kind === 'output'" id="condition-input" :position="Position.Right" type="target" />
+    </template>
 
     <div v-if="node?.kind === 'step' && node.outputs?.length" class="border-t pb-1">
       <div class="text-caption text-medium-emphasis px-3" style="line-height: 20px">Results</div>
@@ -87,6 +81,9 @@
   background: rgb(var(--v-theme-surface));
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
   overflow-wrap: anywhere;
+}
+.node-choices > :deep(*) {
+  max-width: 100%;
 }
 .node-button {
   display: block;

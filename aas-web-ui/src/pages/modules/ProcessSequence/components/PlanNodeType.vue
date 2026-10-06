@@ -1,6 +1,7 @@
 <template>
   <div>
     <PlanChoice
+      :color="typeColor"
       :compact="compact"
       :context="node.name"
       :items="items"
@@ -31,6 +32,7 @@
   const props = withDefaults(defineProps<{ node: PlanNode, compact?: boolean }>(), { compact: false })
   const emit = defineEmits<{ change: [kind: PlanNode['kind']] }>()
   const pending = ref<PlanNode['kind']>()
+  const typeColor = computed(() => ({ step: 'primary', call: 'teal', parallel: 'amber-darken-3', decision: 'deep-purple', conditional: 'deep-purple' })[props.node.kind])
   const items = computed(() => nodeTypes.map(type => ({ ...type, disabled: type.value === 'step' && props.node.kind !== 'step' && !isEmptyContainer(props.node) })))
 
   function choose (value: string): void {

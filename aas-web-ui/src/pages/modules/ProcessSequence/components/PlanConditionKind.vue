@@ -1,5 +1,6 @@
 <template>
   <PlanChoice
+    color="deep-purple"
     :compact="compact"
     :context="context"
     :items="items"
