@@ -1,11 +1,16 @@
-import type { PlanBranch, PlanNode, ProcessPlan, StepNode } from '../types/plan'
+import type { PlanBranch, PlanNode, ProcessPlan } from '../types/plan'
 import { v4 } from 'uuid'
 import { planSchema } from '../types/plan'
+import { newComparison } from './conditions'
+export { expandPlan } from './planPreview'
 
 export function newNode (kind: PlanNode['kind'], scopeId = ''): PlanNode {
   const id = v4()
   if (kind === 'call') {
     return { id, kind, name: 'Subprocess', scopeId }
+  }
+  if (kind === 'decision') {
+    return { id, kind, name: 'Decision', condition: newComparison(), branches: [newBranch('Yes'), newBranch('No')] }
   }
   if (kind === 'conditional') {
     return { id, kind, name: 'Optional flow', condition: { kind: 'everyNthProduct', every: 5 }, nodes: [] }
@@ -35,13 +40,16 @@ export function flattenNodes (nodes: PlanNode[]): PlanNode[] {
     if (node.kind === 'conditional') {
       return [node, ...flattenNodes(node.nodes)]
     }
-    return [node, ...(node.kind === 'parallel' ? node.branches.flatMap(branch => flattenNodes(branch.nodes)) : [])]
+    return [node, ...((node.kind === 'parallel' || node.kind === 'decision') ? node.branches.flatMap(branch => flattenNodes(branch.nodes)) : [])]
   })
 }
 
 export function parsePlan (text: string, productAasId: string): ProcessPlan {
   const plan = planSchema.parse(JSON.parse(text))
-  if (plan.scopes.some(scope => flattenNodes(scope.nodes).some(node => node.kind === 'conditional'))) {
+  const nodes = plan.scopes.flatMap(scope => flattenNodes(scope.nodes))
+  if (nodes.some(node => node.kind === 'decision' || (node.kind === 'conditional' && node.condition.kind === 'comparison') || (node.kind === 'step' && (node.outputs !== undefined || node.process?.parameters.some(parameter => parameter.unit !== undefined))))) {
+    plan.schema = 'process-sequence-plan/5.0'
+  } else if (plan.schema !== 'process-sequence-plan/5.0' && nodes.some(node => node.kind === 'conditional')) {
     plan.schema = 'process-sequence-plan/4.0'
   }
   if (plan.productAasId !== productAasId) {
@@ -77,7 +85,18 @@ export function structuralIssues (plan: ProcessPlan): string[] {
       parent = scopes.get(parent)!.parentId
     }
     for (const node of flattenNodes(scope.nodes)) {
-      if (node.kind === 'conditional' && (node.condition.kind !== 'everyNthProduct' || !Number.isSafeInteger(node.condition.every) || node.condition.every < 1)) {
+      if (node.kind === 'step' && new Set(node.outputs?.map(output => output.id)).size !== (node.outputs?.length ?? 0)) {
+        issues.push(`Output identities must be unique in ${node.name}.`)
+      }
+      if (node.kind === 'parallel' || node.kind === 'decision') {
+        for (const branch of node.branches) {
+          if (ids.has(branch.id)) {
+            issues.push(`Duplicate branch identity in ${scope.name}.`)
+          }
+          ids.add(branch.id)
+        }
+      }
+      if ((node.kind === 'conditional' || node.kind === 'decision') && node.condition.kind === 'everyNthProduct' && (!Number.isSafeInteger(node.condition.every) || node.condition.every < 1)) {
         issues.push(`${scope.name} / ${node.name}: enter a positive whole number of products.`)
       }
       if (ids.has(node.id)) {
@@ -129,52 +148,4 @@ export function canCall (plan: ProcessPlan, from: string, target: string): boole
       .some(node => node.kind === 'call' && reaches(node.scopeId))
   }
   return !reaches(target)
-}
-
-export type ExpandedStep = { id: string, scopeId: string, step: StepNode, after: string[] }
-
-/** Expand calls per invocation and preserve all branch prerequisites at a join. No scheduling is implied. */
-export function expandPlan (plan: ProcessPlan, scopeId = plan.rootScopeId, productNumber = 1): ExpandedStep[] {
-  if (!Number.isSafeInteger(productNumber) || productNumber < 1) {
-    throw new Error('Product number must be a positive whole number within this production run.')
-  }
-  const errors = structuralIssues(plan)
-  if (errors.length > 0) {
-    throw new Error(errors[0])
-  }
-  const result: ExpandedStep[] = []
-  function expand (nodes: PlanNode[], owner: string, path: string[], incoming: string[]): string[] {
-    let previous = incoming
-    for (const node of nodes) {
-      const nextPath = [...path, node.id]
-      switch (node.kind) {
-        case 'step': {
-          const id = JSON.stringify(nextPath)
-          result.push({ id, scopeId: owner, step: node, after: previous })
-          previous = [id]
-
-          break
-        }
-        case 'call': {
-          const child = plan.scopes.find(scope => scope.id === node.scopeId)!
-          previous = expand(child.nodes, child.id, nextPath, previous)
-
-          break
-        }
-        case 'conditional': {
-          if (productNumber % node.condition.every === 0) {
-            previous = expand(node.nodes, owner, nextPath, previous)
-          }
-
-          break
-        }
-        default: {
-          previous = [...new Set(node.branches.flatMap(branch => expand(branch.nodes, owner, [...nextPath, branch.id], previous)))]
-        }
-      }
-    }
-    return previous
-  }
-  expand(plan.scopes.find(scope => scope.id === scopeId)?.nodes ?? [], scopeId, [scopeId], [])
-  return result
 }

@@ -4,6 +4,7 @@ import { useAASStore } from '@/store/AASDataStore'
 import { useInfrastructureStore } from '@/store/InfrastructureStore'
 import { canCall, flattenNodes, parsePlan } from '../utils/plan'
 import { createPlanHierarchy } from '../utils/planHierarchy'
+import { changeNodeType, unwrapConditional } from '../utils/planTransforms'
 import { usePlanRepository } from './usePlanRepository'
 import { usePlanSources } from './usePlanSources'
 
@@ -22,12 +23,14 @@ export function usePlanWorkspace () {
   const savedContent = ref('')
   const resources = ref<{ id: string, name: string }[]>([])
   const availableProcesses = ref<PlanProcess[]>([])
+  const typeUndo = ref<{ before: ProcessPlan, after: string, scopeId: string, nodeId: string }>()
   let generation = 0
   let storageKey = ''
 
   const product = computed(() => aasStore.getSelectedAAS)
   const scope = computed(() => plan.value?.scopes.find(item => item.id === selectedScopeId.value))
   const dirty = computed(() => !!plan.value && (hierarchy.hasUnsavedDefinitions() || JSON.stringify(plan.value) !== savedContent.value))
+  const canUndoType = computed(() => !!typeUndo.value && JSON.stringify(plan.value) === typeUndo.value.after)
   const selectedNode = computed({
     get: () => flattenNodes(scope.value?.nodes ?? []).find(node => node.id === selectedNodeId.value),
     set: (next: PlanNode | undefined) => {
@@ -108,6 +111,7 @@ export function usePlanWorkspace () {
     plan.value = undefined
     error.value = ''
     message.value = ''
+    typeUndo.value = undefined
     availableProcesses.value = []
     resources.value = []
     selectedScopeId.value = 'product'
@@ -176,6 +180,42 @@ export function usePlanWorkspace () {
     selectedScopeId.value = id
   }
 
+  function changeType (kind: PlanNode['kind']): void {
+    transformType(before => changeNodeType(before, selectedScopeId.value, selectedNodeId.value, kind, targets.value[0]?.id))
+  }
+
+  function removeCondition (): void {
+    transformType(before => unwrapConditional(before, selectedScopeId.value, selectedNodeId.value))
+  }
+
+  function transformType (transform: (before: ProcessPlan) => { plan: ProcessPlan, selectedId: string }): void {
+    if (!plan.value || !selectedNode.value) {
+      return
+    }
+    try {
+      const before = parsePlan(JSON.stringify(plan.value), plan.value.productAasId)
+      const changed = transform(before)
+      const next = hierarchy.synchronize(changed.plan)
+      typeUndo.value = { before, after: JSON.stringify(next), scopeId: selectedScopeId.value, nodeId: selectedNodeId.value }
+      plan.value = next
+      selectedNodeId.value = changed.selectedId
+      message.value = ''
+    } catch (error_) {
+      message.value = error_ instanceof Error ? error_.message : 'The type could not be changed.'
+    }
+  }
+
+  function undoTypeChange (): void {
+    if (!canUndoType.value || !typeUndo.value) {
+      return
+    }
+    const { before, scopeId, nodeId } = typeUndo.value
+    plan.value = hierarchy.synchronize(parsePlan(JSON.stringify(before), before.productAasId))
+    selectedScopeId.value = scopeId
+    selectedNodeId.value = nodeId
+    typeUndo.value = undefined
+  }
+
   async function save (): Promise<void> {
     if (!plan.value || saving.value) {
       return
@@ -219,6 +259,6 @@ export function usePlanWorkspace () {
   return {
     plan, product, scope, selectedScopeId, selectedNodeId, selectedNode, loading, saving,
     error, message, dirty, targets, availableProcesses, resources, breadcrumb, ownerName,
-    initialize, reload, addSubprocess, save, download,
+    initialize, reload, addSubprocess, save, download, changeType, undoTypeChange, canUndoType, removeCondition,
   }
 }

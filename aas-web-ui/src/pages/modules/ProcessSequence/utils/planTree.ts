@@ -24,7 +24,7 @@ export function extractAssembly (plan: ProcessPlan, rootId: string, aasId: strin
       if (node.kind === 'call' && !ids.has(node.scopeId)) {
         throw new Error(`Cannot share ${root!.name}: ${node.name} calls a definition outside this assembly.`)
       }
-      if (node.kind === 'parallel') {
+      if (node.kind === 'parallel' || node.kind === 'decision') {
         for (const branch of node.branches) {
           check(branch.nodes)
         }

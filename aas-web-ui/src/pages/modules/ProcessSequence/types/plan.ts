@@ -10,7 +10,7 @@ export type CapabilityReference = z.infer<typeof capabilityReferenceSchema>
 export type CapabilityRequirement = z.infer<typeof requirementSchema>
 const parameterSchema = z.object({
   name: z.string(), group: z.enum(['ProductParameters', 'ProcessParameters', 'ResourceParameters']),
-  dataType: z.string(), value: z.string(), source: sourceSchema,
+  dataType: z.string(), value: z.string(), source: sourceSchema, unit: z.string().optional(),
 })
 const processSchema = z.object({
   processId: z.string(), name: z.string(), source: sourceSchema,
@@ -18,6 +18,26 @@ const processSchema = z.object({
   requiredCapabilities: z.array(requirementSchema).optional(),
 })
 const bindingSchema = z.object({ name: z.string(), value: z.string(), source: sourceSchema.nullable() })
+export const outputSchema = z.object({ id: z.string().min(1), name: z.string(), type: z.enum(['boolean', 'number', 'string']), unit: z.string() })
+export type PlanOutput = z.infer<typeof outputSchema>
+export const conditionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('everyNthProduct'), every: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) }),
+  z.object({
+    kind: z.literal('comparison'),
+    operand: z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('parameter'), stepId: z.string(), source: sourceSchema }),
+      z.object({ kind: z.literal('output'), stepId: z.string(), outputId: z.string() }),
+    ]).nullable(),
+    operator: z.enum(['eq', 'ne', 'gt', 'gte', 'lt', 'lte']),
+    expected: z.discriminatedUnion('type', [
+      z.object({ type: z.literal('boolean'), value: z.boolean() }),
+      z.object({ type: z.literal('number'), value: z.number() }),
+      z.object({ type: z.literal('string'), value: z.string() }),
+    ]),
+    unit: z.string(),
+  }),
+])
+export type PlanCondition = z.infer<typeof conditionSchema>
 
 export type SourceReference = z.infer<typeof sourceSchema>
 export type PlanParameter = z.infer<typeof parameterSchema>
@@ -35,11 +55,13 @@ export type StepNode = {
   executionMode?: 'manual' | 'station'
   /** Undefined inherits process requirements; [] explicitly removes them for this occurrence. */
   requiredCapabilities?: CapabilityRequirement[]
+  outputs?: PlanOutput[]
 }
 export type CallNode = { id: string, kind: 'call', name: string, scopeId: string }
 export type ParallelNode = { id: string, kind: 'parallel', name: string, branches: PlanBranch[] }
-export type ConditionalNode = { id: string, kind: 'conditional', name: string, condition: { kind: 'everyNthProduct', every: number }, nodes: PlanNode[] }
-export type PlanNode = StepNode | CallNode | ParallelNode | ConditionalNode
+export type ConditionalNode = { id: string, kind: 'conditional', name: string, condition: PlanCondition, nodes: PlanNode[] }
+export type DecisionNode = { id: string, kind: 'decision', name: string, condition: PlanCondition, branches: [PlanBranch, PlanBranch] }
+export type PlanNode = StepNode | CallNode | ParallelNode | ConditionalNode | DecisionNode
 export type PlanBranch = { id: string, name: string, nodes: PlanNode[] }
 
 const nodeSchema: z.ZodType<PlanNode> = z.lazy(() => z.discriminatedUnion('kind', [
@@ -49,6 +71,7 @@ const nodeSchema: z.ZodType<PlanNode> = z.lazy(() => z.discriminatedUnion('kind'
     skillReference: capabilityReferenceSchema.optional(),
     executionMode: z.enum(['manual', 'station']).optional(),
     requiredCapabilities: z.array(requirementSchema).optional(),
+    outputs: z.array(outputSchema).optional(),
   }),
   z.object({ id: z.string().min(1), kind: z.literal('call'), name: z.string(), scopeId: z.string() }),
   z.object({
@@ -57,13 +80,20 @@ const nodeSchema: z.ZodType<PlanNode> = z.lazy(() => z.discriminatedUnion('kind'
   }),
   z.object({
     id: z.string().min(1), kind: z.literal('conditional'), name: z.string(),
-    condition: z.object({ kind: z.literal('everyNthProduct'), every: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) }),
+    condition: conditionSchema,
     nodes: z.array(nodeSchema),
+  }),
+  z.object({
+    id: z.string().min(1), kind: z.literal('decision'), name: z.string(), condition: conditionSchema,
+    branches: z.tuple([
+      z.object({ id: z.string().min(1), name: z.string(), nodes: z.array(nodeSchema) }),
+      z.object({ id: z.string().min(1), name: z.string(), nodes: z.array(nodeSchema) }),
+    ]),
   }),
 ]))
 
 export const planSchema = z.object({
-  schema: z.enum(['process-sequence-plan/2.0', 'process-sequence-plan/3.0', 'process-sequence-plan/4.0']),
+  schema: z.enum(['process-sequence-plan/2.0', 'process-sequence-plan/3.0', 'process-sequence-plan/4.0', 'process-sequence-plan/5.0']),
   productAasId: z.string().min(1),
   revision: z.number().int().nonnegative(),
   rootScopeId: z.string(),

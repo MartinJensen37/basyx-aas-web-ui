@@ -45,6 +45,27 @@ function fixture () {
 }
 
 describe('shared recursive assembly plans', () => {
+  it('preserves decision branches and schema when a child is opened through different owners', async () => {
+    const { session, database } = fixture()
+    const child = session().hierarchy
+    const view = await child.load('drive', 'Drive')
+    const decision = newNode('decision')
+    if (decision.kind !== 'decision') {
+      throw new Error('Expected decision')
+    }
+    decision.condition = { kind: 'everyNthProduct', every: 2 }
+    decision.branches[0].nodes = [newNode('call', 'motor-mount')]
+    decision.branches[1].nodes = [newNode('step')]
+    view.scopes[0].nodes = [decision]
+    await child.save(view)
+    expect(database.get('drive')!.schema).toBe('process-sequence-plan/5.0')
+    const reopened = await session().hierarchy.load('robot', 'Robot')
+    expect(reopened.schema).toBe('process-sequence-plan/5.0')
+    expect(expandPlan(reopened, reopened.rootScopeId, 2)[0].scopeId).toContain('motor-mount')
+    expect(expandPlan(reopened, reopened.rootScopeId, 1)[0].scopeId).toBe('drive-mount')
+    expect((await session().hierarchy.load('drive', 'Drive')).scopes[0].nodes[0]).toEqual(decision)
+  })
+
   it('retains an optional subprocess call when editing a shared assembly through its parent', async () => {
     const { session, database } = fixture()
     const parent = session().hierarchy

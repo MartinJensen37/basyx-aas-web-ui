@@ -152,7 +152,7 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
         capabilities.push(capability(recipe.id, id, operation, 'Required', limits))
       }
       const source = { aasId: aas(recipe.id), submodelId: sm(recipe.id, 'parameters'), path: ['Processes', `Process_${index}`] }
-      const parameters: PlanProcess['parameters'] = limits.filter(item => item.value !== undefined).map(item => ({ name: item.name, group: 'ProductParameters' as const, dataType: typeof item.value === 'number' ? 'xs:double' : 'xs:string', value: String(item.value), source: { ...source, path: [...source.path, 'ProductParameters', item.name] } }))
+      const parameters: PlanProcess['parameters'] = limits.filter(item => item.value !== undefined).map(item => ({ name: item.name, group: 'ProductParameters' as const, dataType: typeof item.value === 'number' ? 'xs:double' : 'xs:string', value: String(item.value), ...(item.unit ? { unit: item.unit } : {}), source: { ...source, path: [...source.path, 'ProductParameters', item.name] } }))
       parameters.push(...[{ name: 'Cycle', value: String(cycle), dataType: 'xs:double' }, { name: 'RecipeNote', value: 'Illustrative values; editable engineering demo', dataType: 'xs:string' }].map(parameter => ({ ...parameter, group: 'ProcessParameters' as const, source: { ...source, path: [...source.path, 'ProcessParameters', parameter.name] } })))
       const requiredCapabilities = manual ? [] : [{ name, reference: capRef(recipe.id, id) }]
       const relevant = parts.filter(part => {
@@ -186,7 +186,7 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
     const plannedNodes: PlanNode[] = nodes.map(node => node.id === 'Inspection' && recipe.inspectionEvery
       ? { id: 'periodic-inspection', kind: 'conditional', name: 'Periodic inspection', condition: { kind: 'everyNthProduct', every: recipe.inspectionEvery }, nodes: [node] }
       : node)
-    savePlan({ schema: recipe.inspectionEvery ? 'process-sequence-plan/4.0' : 'process-sequence-plan/3.0', productAasId: aas(recipe.id), revision: 1, rootScopeId: 'product', scopes: [
+    savePlan({ schema: 'process-sequence-plan/5.0', productAasId: aas(recipe.id), revision: 1, rootScopeId: 'product', scopes: [
       { id: 'product', name: recipe.name, parentId: null, material: null, nodes: plannedNodes },
       ...parts.map((part, index) => ({ id: `part-${index}`, name: part.name, parentId: 'product', nodes: [], planAasId: aas(part.id), material: { aasId: aas(recipe.id), submodelId: bomId, path: ['Product', `Part_${index}`], globalAssetId: `${PHARMA_BASE}/asset/${part.id}` } })),
     ] })

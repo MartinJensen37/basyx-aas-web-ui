@@ -1,6 +1,6 @@
 <template>
   <div class="pa-3">
-    <p class="text-body-small mb-3">Steps for the selected product number, including called subprocesses. Optional flows are skipped when their interval does not match. Each step waits for its listed predecessors.</p>
+    <p class="text-body-small mb-3">Preview the selected product number and simulated outputs. Each operation waits for its listed predecessors. No equipment is contacted.</p>
 
     <v-text-field
       v-model="productNumber"
@@ -15,6 +15,19 @@
       type="number"
     />
 
+    <v-alert v-if="error" class="mb-3" density="compact" type="warning">{{ error }}</v-alert>
+    <PlanPreviewInputs v-if="preview" v-model="values" :inputs="preview.inputs" />
+
+    <v-list v-if="preview?.choices.length" aria-label="Flow choices" class="mb-3" density="compact">
+      <v-list-item v-for="choice in preview.choices" :key="choice.id" :subtitle="choice.reason || choice.condition" :title="choice.name">
+        <template #append>
+          <v-chip :color="choice.reason ? 'warning' : 'primary'" size="small">{{ choice.path }}</v-chip>
+        </template>
+      </v-list-item>
+    </v-list>
+
+    <v-alert v-if="preview?.blocked" class="mb-3" density="compact" type="warning">Preview paused at an unresolved condition. Following operations are not included.</v-alert>
+
     <v-table density="compact">
       <thead><tr><th>Step</th><th>Assembly / subprocess</th><th>Waits for</th></tr></thead>
 
@@ -27,17 +40,30 @@
       </tbody>
     </v-table>
 
-    <p v-if="valid && steps.length === 0" class="text-body-small mt-3">No operations are scheduled for this product number in this sequence.</p>
+    <p v-if="preview && !preview.blocked && steps.length === 0" class="text-body-small mt-3">No operations are scheduled for this product number in this sequence.</p>
   </div>
 </template>
 
 <script setup lang="ts">
   import type { ProcessPlan } from '../types/plan'
-  import { expandPlan } from '../utils/plan'
+  import type { PreviewValue } from '../utils/planPreview'
+  import { previewPlan } from '../utils/planPreview'
+  import PlanPreviewInputs from './PlanPreviewInputs.vue'
 
   const props = defineProps<{ plan: ProcessPlan, scopeId: string }>()
   const productNumber = ref<number | string>(1)
+  const values = ref<Record<string, PreviewValue>>({})
   const valid = computed(() => Number.isSafeInteger(Number(productNumber.value)) && Number(productNumber.value) > 0)
-  const steps = computed(() => valid.value ? expandPlan(props.plan, props.scopeId, Number(productNumber.value)) : [])
+  const result = computed(() => {
+    if (!valid.value) return {}
+    try {
+      return { preview: previewPlan(props.plan, props.scopeId, Number(productNumber.value), values.value) }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'The plan cannot be previewed.' }
+    }
+  })
+  const preview = computed(() => result.value.preview)
+  const error = computed(() => result.value.error)
+  const steps = computed(() => preview.value?.steps ?? [])
   const stepLabels = computed(() => new Map(steps.value.map((entry, index) => [entry.id, `${index + 1}. ${entry.step.name}`])))
 </script>

@@ -83,9 +83,14 @@
         <template #right>
           <PlanInspector
             v-model="selectedNode"
+            :can-undo="canUndoType"
+            :nodes="scope.nodes"
             :processes="availableProcesses"
             :resources="resources"
             :targets="targets"
+            @change-type="changeType"
+            @undo-type="undoTypeChange"
+            @unwrap="removeCondition"
           />
         </template>
       </SplitPanes>
@@ -122,7 +127,7 @@
   const {
     plan, product, scope, selectedScopeId, selectedNodeId, selectedNode, loading, saving,
     error, message, dirty, targets, availableProcesses, resources, breadcrumb, ownerName,
-    reload, addSubprocess, save, download,
+    reload, addSubprocess, save, download, changeType, undoTypeChange, canUndoType, removeCondition,
   } = usePlanWorkspace()
 
   const rootName = computed(() => plan.value?.scopes.find(item => item.id === plan.value?.rootScopeId)?.name)

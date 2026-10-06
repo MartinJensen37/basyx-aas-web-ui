@@ -1,12 +1,20 @@
 # Process Sequence module
 
-The [flow rules proposal](FLOW_RULES_PROPOSAL.md) describes a future unified step editor, decisions, events and repetition. It is a design proposal; the behavior below describes the implemented module.
+The [flow rules proposal](FLOW_RULES_PROPOSAL.md) describes the broader direction. Its first increment is implemented: a unified step editor, Boolean decisions, comparison-based optional flows and simulated operation outputs. Events, repetition and execution remain future work.
 
 Open `/modules/processsequence` without selecting a submodel. **Product to plan** lists AASs with the exact IDTA 02031-1 Process Parameters Type semantic ID. Names and arbitrary files do not qualify a product.
 
-The left tree selects a product, material occurrence or subprocess. The graph contains ordered operations, subprocess calls and parallel branches with an all-branches join, and optional flows with a Run/Skip choice. Selecting a node opens process parameters, material references, capability requirements and station/skill bindings in the inspector. **Combined steps** expands calls and shows precedence for a chosen product number. Cyclic calls are rejected.
+The left tree selects a product, material occurrence or subprocess. Use **Add step**, then **Step type** to choose Operation, Subprocess, Decision, Parallel or Optional. The graph generates all-branch parallel joins and selected-path decision merges. Selecting a node opens its configuration in the inspector. **Combined steps** expands calls and previews the chosen paths for a product number and simulated outputs. Cyclic calls are rejected.
 
 Each assembly AAS owns one canonical sequence. A parent material occurrence references that owner; it does not duplicate the child steps. Editing an assembly directly or through its parent saves the same definition. Missing sequences start empty. Shared parts can occur in several products. Save before changing product; browser drafts recover quietly within the same tab. **Reload plans** archives the current browser draft and loads the server version. There are no draft-download reminders or BPMN editor.
+
+## Decisions and type changes
+
+Decisions have Yes and No branches. Optional flows have a Run body and an empty Skip path. Both support Every N products or a typed comparison against a Process Parameters snapshot or a declared operation output. Boolean/string values support equality and inequality; numbers also support ordered comparisons. Parameter units are retained when available, and output units are explicit. Comparisons require matching types and units; no unit conversion is inferred.
+
+Declare an operation's outputs in **Operation outputs**. **Combined steps** accepts simulated results for each subprocess invocation and lists the selected paths. Missing values, incompatible types/units and unavailable outputs pause the affected path and its successors. Other parallel branches can still be previewed. A result produced only in an alternative path cannot be referenced after its merge; keep the decision inside that path until explicit merge-output contracts are supported. Parameter snapshots are definition inputs, not live station measurements. Simulated values are never saved in the definition or sent to equipment.
+
+Changing a configured operation to a container wraps it without losing its identity, process or bindings. Optional-to-Decision retains the Run body and exposes Skip as No. A populated No branch is preserved by wrapping the entire decision when changing to Optional. Subprocess conversion extracts configured content into a local scope; extraction that would break a condition reference is refused. Destructive container-to-operation conversion is unavailable. **Remove condition** unwraps an optional body. **Undo type change** restores the previous structure until another edit or save changes the draft. The conversion dialog explains the transformation before applying it.
 
 ## Data contracts
 

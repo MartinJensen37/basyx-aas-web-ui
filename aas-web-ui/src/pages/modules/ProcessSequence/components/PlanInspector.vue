@@ -3,6 +3,17 @@
     <v-card-title class="text-body-large">{{ node ? 'Selection details' : 'Sequence details' }}</v-card-title>
 
     <v-card-text v-if="node">
+      <PlanNodeType :key="node.id" :node="node" @change="emit('change-type', $event)" />
+
+      <v-btn
+        v-if="canUndo"
+        class="mb-3"
+        prepend-icon="mdi-undo"
+        size="small"
+        variant="text"
+        @click="emit('undo-type')"
+      >Undo type change</v-btn>
+
       <v-text-field
         v-model="node.name"
         class="mb-3"
@@ -23,7 +34,7 @@
 
       </InspectorSection>
 
-      <PlanCondition v-else-if="node.kind === 'conditional'" v-model="node" />
+      <PlanCondition v-else-if="node.kind === 'conditional' || node.kind === 'decision'" :key="node.id" v-model="node.condition" :nodes="nodes" />
 
       <InspectorSection v-else-if="node.kind === 'parallel'" color="warning" help="All branches start together and join before the next step. Select a branch on the graph to insert operations. Only empty extra branches can be removed." title="Parallel branches">
 
@@ -62,6 +73,7 @@
         </InspectorSection>
 
         <PlanCapabilities v-model="node" :inherited="inheritedRequirements" :resources="resources" />
+        <PlanOutputs v-model="node" />
 
         <InspectorSection collapsible color="info" help="Assign one station skill, choose a manual operation, or leave the resource unassigned until later. Capability matching compares all available resources." title="Resource assignment">
           <v-select
@@ -77,6 +89,8 @@
           <PlanBindings v-if="node.executionMode !== 'manual'" :key="node.id" v-model="node" :resources="resources" />
         </InspectorSection>
       </template>
+
+      <v-btn v-if="node.kind === 'conditional'" size="small" variant="text" @click="emit('unwrap')">Remove condition</v-btn>
     </v-card-text>
 
     <v-card-text v-else>
@@ -93,13 +107,18 @@
   import PlanBindings from './PlanBindings.vue'
   import PlanCapabilities from './PlanCapabilities.vue'
   import PlanCondition from './PlanCondition.vue'
+  import PlanNodeType from './PlanNodeType.vue'
+  import PlanOutputs from './PlanOutputs.vue'
   import PlanParameters from './PlanParameters.vue'
 
   const props = defineProps<{
     processes: PlanProcess[]
     targets: { id: string, name: string }[]
     resources: { id: string, name: string }[]
+    nodes: PlanNode[]
+    canUndo: boolean
   }>()
+  const emit = defineEmits<{ 'change-type': [kind: PlanNode['kind']], 'undo-type': [], 'unwrap': [] }>()
   const node = defineModel<PlanNode | undefined>()
   const inheritedRequirements = computed(() => {
     const process = node.value?.kind === 'step' ? node.value.process : null

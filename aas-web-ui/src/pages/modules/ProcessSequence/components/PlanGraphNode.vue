@@ -8,7 +8,7 @@
       </span>
 
       <span class="node-title font-weight-medium"><v-icon v-if="compact" class="mr-1" :icon="icon" size="16" />{{ data.title }}</span>
-      <span v-if="data.kind === 'conditional'" class="text-caption d-block mt-1">{{ data.subtitle }}</span>
+      <span v-if="data.kind === 'conditional' || data.kind === 'decision'" class="text-caption d-block mt-1 text-truncate" :title="data.details || data.subtitle">{{ data.subtitle }}</span>
     </button>
 
     <button v-if="data.scopeId" :aria-label="`Open ${data.title}`" class="open-button nodrag" @click="emit('open', data.scopeId)">
@@ -27,8 +27,8 @@
   const props = defineProps<{ data: PlanGraphData, active: boolean }>()
   const emit = defineEmits<{ select: [], open: [id: string] }>()
   const compact = computed(() => ['start', 'end', 'branch', 'join', 'skip', 'merge'].includes(props.data.kind))
-  const category = computed(() => ({ step: 'Process', call: 'Subprocess', parallel: 'Parallel split', conditional: 'Optional flow', merge: 'Selected path', skip: 'Skip', join: 'Parallel join', branch: 'Branch', start: 'Sequence', end: 'Sequence' })[props.data.kind])
-  const icon = computed(() => ({ step: 'mdi-cog-outline', call: 'mdi-file-tree-outline', parallel: 'mdi-call-split', conditional: 'mdi-directions-fork', merge: 'mdi-call-merge', skip: 'mdi-debug-step-over', join: 'mdi-call-merge', branch: 'mdi-source-branch', start: 'mdi-play-outline', end: 'mdi-check' })[props.data.kind])
+  const category = computed(() => ({ step: 'Process', call: 'Subprocess', parallel: 'Parallel split', decision: 'Decision', conditional: 'Optional flow', merge: 'Selected path', skip: 'Skip', join: 'Parallel join', branch: 'Branch', start: 'Sequence', end: 'Sequence' })[props.data.kind])
+  const icon = computed(() => ({ step: 'mdi-cog-outline', call: 'mdi-file-tree-outline', parallel: 'mdi-call-split', decision: 'mdi-help-rhombus-outline', conditional: 'mdi-directions-fork', merge: 'mdi-call-merge', skip: 'mdi-debug-step-over', join: 'mdi-call-merge', branch: 'mdi-source-branch', start: 'mdi-play-outline', end: 'mdi-check' })[props.data.kind])
 </script>
 
 <style scoped>
@@ -81,7 +81,7 @@
 .plan-graph-node--parallel, .plan-graph-node--join {
   border-top-color: #b07812;
 }
-.plan-graph-node--conditional, .plan-graph-node--merge, .plan-graph-node--skip {
+.plan-graph-node--decision, .plan-graph-node--conditional, .plan-graph-node--merge, .plan-graph-node--skip {
   border-top-color: #7e57c2;
 }
 .plan-graph-node--branch {

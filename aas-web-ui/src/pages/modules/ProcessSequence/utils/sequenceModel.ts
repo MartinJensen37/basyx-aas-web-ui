@@ -1,4 +1,6 @@
-import type { CapabilityReference, PlanNode, PlanProcess, ProcessPlan, SourceReference } from '../types/plan.ts'
+import type { CapabilityReference, PlanCondition, PlanNode, PlanProcess, ProcessPlan, SourceReference } from '../types/plan.ts'
+import { conditionSchema } from '../types/plan.ts'
+import { parseScalar } from './conditions.ts'
 
 /** Application template: IDTA input/capability submodels remain separate and are linked by references. */
 export const SEQUENCE_SEMANTIC_ID = 'https://smartproductionlab.aau.dk/SubmodelTemplate/ProductionSequence/1/0'
@@ -35,6 +37,7 @@ function processElements (process: PlanProcess): AasElement[] {
   return [prop('ProcessId', process.processId), prop('Name', process.name), ...sourceElements(process.source),
     collection('Parameters', process.parameters.map((parameter, index) => collection(indexed('Parameter', index), [
       prop('Name', parameter.name), prop('Group', parameter.group), prop('DataType', parameter.dataType), prop('Value', parameter.value),
+      ...(parameter.unit === undefined ? [] : [prop('Unit', parameter.unit)]),
       ...sourceElements(parameter.source),
     ], 'Parameter'))), collection('Materials', structuredClone(process.material) as AasElement[]),
     ...(process.requiredCapabilities === undefined ? [] : [requirements(process.requiredCapabilities)]),
@@ -55,6 +58,56 @@ function readRequirements (element: AasElement) {
     : undefined
 }
 
+function conditionElement (condition: PlanCondition): AasElement {
+  if (condition.kind === 'everyNthProduct') {
+    return collection('Condition', [
+      prop('ConditionType', condition.kind), prop('EveryNProducts', condition.every, 'xs:positiveInteger'), prop('CounterScope', 'productionRun'),
+    ])
+  }
+  const operand = condition.operand
+  return collection('Condition', [
+    prop('ConditionType', condition.kind), prop('Operator', condition.operator), prop('Unit', condition.unit),
+    collection('Expected', [prop('DataType', condition.expected.type), prop('Value', String(condition.expected.value), { boolean: 'xs:boolean', number: 'xs:double', string: 'xs:string' }[condition.expected.type])]),
+    ...(operand
+      ? [collection('Operand', [prop('OperandType', operand.kind), prop('StepId', operand.stepId),
+          ...(operand.kind === 'output' ? [prop('OutputId', operand.outputId)] : sourceElements(operand.source)),
+        ])]
+      : []),
+  ])
+}
+
+function readCondition (element: AasElement): PlanCondition {
+  const condition = field(element, 'Condition')
+  if (!condition) {
+    throw new Error('Missing flow condition.')
+  }
+  if (value(condition, 'ConditionType') === 'everyNthProduct') {
+    if (value(condition, 'CounterScope') !== 'productionRun') {
+      throw new Error('Unsupported optional flow counter scope.')
+    }
+    return conditionSchema.parse({ kind: 'everyNthProduct', every: Number(value(condition, 'EveryNProducts')) })
+  }
+  if (value(condition, 'ConditionType') !== 'comparison') {
+    throw new Error('Unsupported flow condition type.')
+  }
+  const operand = field(condition, 'Operand')
+  const expected = field(condition, 'Expected')
+  if (!expected || field(expected, 'Value')?.value == null || field(condition, 'Unit')?.value == null) {
+    throw new Error('A comparison requires an explicit expected value and unit (empty for unitless values).')
+  }
+  const type = value(expected, 'DataType')
+  const raw = value(expected, 'Value')
+  const actual = type === 'number' || type === 'boolean' ? parseScalar(type, raw) : raw
+  return conditionSchema.parse({
+    kind: 'comparison', operator: value(condition, 'Operator'), unit: value(condition, 'Unit'), expected: { type, value: actual },
+    operand: operand
+      ? { kind: value(operand, 'OperandType'), stepId: value(operand, 'StepId'),
+          ...(value(operand, 'OperandType') === 'output' ? { outputId: value(operand, 'OutputId') } : { source: sourceFrom(operand) }),
+        }
+      : null,
+  })
+}
+
 export function buildSequenceSubmodel (plan: ProcessPlan, id: string): AasElement {
   const scopePaths = new Map(plan.scopes.map((scope, index) => [scope.id, indexed('Scope', index)]))
   const scopeRef = (scopeId: string) => modelRef([{ type: 'Submodel', value: id }, { type: 'SubmodelElementCollection', value: 'Scopes' }, { type: 'SubmodelElementCollection', value: scopePaths.get(scopeId)! }])
@@ -63,10 +116,7 @@ export function buildSequenceSubmodel (plan: ProcessPlan, id: string): AasElemen
       const common = [prop('NodeId', node.id), prop('Kind', node.kind), prop('Name', node.name), prop('Order', index, 'xs:nonNegativeInteger')]
       switch (node.kind) {
         case 'conditional': {
-          common.push(collection('Condition', [
-            prop('ConditionType', node.condition.kind), prop('EveryNProducts', node.condition.every, 'xs:positiveInteger'),
-            prop('CounterScope', 'productionRun'),
-          ]), nodes(node.nodes))
+          common.push(conditionElement(node.condition), nodes(node.nodes))
 
           break
         }
@@ -75,7 +125,11 @@ export function buildSequenceSubmodel (plan: ProcessPlan, id: string): AasElemen
 
           break
         }
+        case 'decision':
         case 'parallel': {
+          if (node.kind === 'decision') {
+            common.push(conditionElement(node.condition))
+          }
           common.push(collection('Branches', node.branches.map((branch, index) => collection(indexed('Branch', index), [
             prop('BranchId', branch.id), prop('Name', branch.name), prop('Order', index, 'xs:nonNegativeInteger'), nodes(branch.nodes),
           ], 'Branch'))))
@@ -83,6 +137,11 @@ export function buildSequenceSubmodel (plan: ProcessPlan, id: string): AasElemen
           break
         }
         default: {
+          if (node.outputs !== undefined) {
+            common.push(collection('Outputs', node.outputs.map((output, index) => collection(indexed('Output', index), [
+              prop('OutputId', output.id), prop('Name', output.name), prop('DataType', output.type), prop('Unit', output.unit),
+            ], 'Output'))))
+          }
           if (node.process) {
             common.push(collection('Process', processElements(node.process)))
           }
@@ -136,17 +195,20 @@ export function readSequenceSubmodel (submodel: AasElement): ProcessPlan {
       const common = { id: value(element, 'NodeId'), name: value(element, 'Name') }
       const kind = value(element, 'Kind')
       if (kind === 'conditional') {
-        const condition = field(element, 'Condition')
-        if (!condition || value(condition, 'ConditionType') !== 'everyNthProduct' || value(condition, 'CounterScope') !== 'productionRun') {
-          throw new Error('Unsupported optional flow condition or counter scope.')
-        }
-        return { ...common, kind, condition: { kind: 'everyNthProduct', every: Number(value(condition, 'EveryNProducts')) }, nodes: nodes(element) }
+        return { ...common, kind, condition: readCondition(element), nodes: nodes(element) }
       }
       if (kind === 'call') {
         return { ...common, kind, scopeId: target(element, 'CalledScope') }
       }
-      if (kind === 'parallel') {
-        return { ...common, kind, branches: ordered(children(element, 'Branches')).map(branch => ({ id: value(branch, 'BranchId'), name: value(branch, 'Name'), nodes: nodes(branch) })) }
+      if (kind === 'parallel' || kind === 'decision') {
+        const branches = ordered(children(element, 'Branches')).map(branch => ({ id: value(branch, 'BranchId'), name: value(branch, 'Name'), nodes: nodes(branch) }))
+        if (kind === 'decision') {
+          if (branches.length !== 2) {
+            throw new Error('A Boolean decision requires exactly Yes and No branches.')
+          }
+          return { ...common, kind, condition: readCondition(element), branches: [branches[0], branches[1]] }
+        }
+        return { ...common, kind, branches }
       }
       if (kind !== 'step') {
         throw new Error(`Unsupported sequence node kind: ${kind}`)
@@ -156,10 +218,11 @@ export function readSequenceSubmodel (submodel: AasElement): ProcessPlan {
         ...common, kind, process: process
           ? {
               processId: value(process, 'ProcessId'), name: value(process, 'Name'), source: sourceFrom(process),
-              parameters: children(process, 'Parameters').map(parameter => ({ name: value(parameter, 'Name'), group: value(parameter, 'Group') as 'ProductParameters', dataType: value(parameter, 'DataType'), value: value(parameter, 'Value'), source: sourceFrom(parameter) })),
+              parameters: children(process, 'Parameters').map(parameter => ({ name: value(parameter, 'Name'), group: value(parameter, 'Group') as 'ProductParameters', dataType: value(parameter, 'DataType'), value: value(parameter, 'Value'), source: sourceFrom(parameter), ...(field(parameter, 'Unit') ? { unit: value(parameter, 'Unit') } : {}) })),
               material: children(process, 'Materials'), ...(readRequirements(process) ? { requiredCapabilities: readRequirements(process) } : {}),
             }
           : null,
+        ...(field(element, 'Outputs') ? { outputs: children(element, 'Outputs').map(output => ({ id: value(output, 'OutputId'), name: value(output, 'Name'), type: value(output, 'DataType') as 'boolean', unit: value(output, 'Unit') })) } : {}),
         resourceAasId: field(element, 'Resource')?.value?.keys?.[0]?.value ?? '', skillId: value(element, 'SkillId'),
         ...(field(element, 'Skill') ? { skillReference: field(element, 'Skill')!.value } : {}),
         ...(field(element, 'ExecutionMode') ? { executionMode: value(element, 'ExecutionMode') as 'manual' | 'station' } : {}),

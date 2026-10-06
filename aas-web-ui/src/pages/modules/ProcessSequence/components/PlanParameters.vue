@@ -42,7 +42,7 @@
     ...groups.map(group => ({
       ...group,
       children: props.process.parameters.filter(parameter => parameter.group === group.id).map(parameter => ({
-        id: JSON.stringify(parameter.source), title: parameter.name, value: parameter.value || 'Not set',
+        id: JSON.stringify(parameter.source), title: parameter.name, value: parameter.value ? `${parameter.value}${parameter.unit ? ` ${parameter.unit}` : ''}` : 'Not set',
         help: `${parameter.dataType} · ${parameter.source.path.join(' / ')}`,
       })),
     })),

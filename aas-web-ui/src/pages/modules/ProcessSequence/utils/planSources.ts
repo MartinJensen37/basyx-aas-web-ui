@@ -59,10 +59,12 @@ function parameterLeaves (element: Element, source: SourceReference, group: Plan
       ...source, path: [...source.path, child.idShort ?? String(index)],
     }, group))
   }
+  const unit = element.embeddedDataSpecifications?.find((spec: Element) => spec.dataSpecificationContent?.modelType === 'DataSpecificationIec61360')?.dataSpecificationContent?.unit
   return [{
     name: label(element) || source.path.at(-1) || '', group, source,
     dataType: String(element.valueType ?? element.modelType ?? ''),
     value: typeof element.value === 'object' ? JSON.stringify(element.value) : String(element.value ?? ''),
+    ...(typeof unit === 'string' ? { unit } : {}),
   }]
 }
 

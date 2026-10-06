@@ -1,6 +1,6 @@
 # Production flow rules proposal
 
-Status: design proposal. The running editor currently supports operations, subprocess calls, parallel blocks and periodic optional blocks. General decisions, event handling, repetition and execution are not implemented by this document. The current storage contract remains [Application Production Sequence 1.0](templates/README.md).
+Status: broader design proposal. The first increment now supports a unified step editor, safe transformations, Boolean decisions, comparison-based optional flows, declared scalar operation outputs and branch-aware preview. Cross-subprocess input/output mappings, merge-output contracts, compound conditions, events, repetition and execution remain proposed. See the implemented [Application Production Sequence 1.0 contract, PlanSchema 5.0](templates/README.md) for exact supported behavior.
 
 ## Authoring model
 

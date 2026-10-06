@@ -11,7 +11,7 @@ function fixture () {
   const before = newNode('step')
   const inspection = newNode('step')
   const after = newNode('step')
-  const flow = newNode('conditional') as ConditionalNode
+  const flow = newNode('conditional') as ConditionalNode & { condition: { kind: 'everyNthProduct', every: number } }
   flow.nodes.push(inspection)
   plan.scopes[0].nodes = [before, flow, after]
   return { plan, flow, before, inspection, after }

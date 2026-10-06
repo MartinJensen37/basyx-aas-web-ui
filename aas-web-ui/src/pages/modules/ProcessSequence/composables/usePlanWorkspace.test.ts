@@ -54,4 +54,25 @@ describe('workspace save boundary', () => {
     expect(workspace.message.value).toContain('include the product root')
     expect(workspace.saving.value).toBe(false)
   })
+
+  it('undoes a type change and protects subsequent edits from being overwritten', async () => {
+    const step = newNode('step')
+    step.name = 'Inspection'
+    workspace.plan.value!.scopes[0].nodes.push(step)
+    workspace.selectedNodeId.value = step.id
+    await flushPromises()
+    workspace.changeType('decision')
+    await flushPromises()
+    expect(workspace.selectedNode.value?.kind).toBe('decision')
+    expect(workspace.canUndoType.value).toBe(true)
+    workspace.undoTypeChange()
+    await flushPromises()
+    expect(workspace.selectedNode.value).toEqual(step)
+    workspace.changeType('conditional')
+    await flushPromises()
+    workspace.selectedNode.value!.name = 'Changed after conversion'
+    expect(workspace.canUndoType.value).toBe(false)
+    workspace.undoTypeChange()
+    expect(workspace.selectedNode.value!.name).toBe('Changed after conversion')
+  })
 })

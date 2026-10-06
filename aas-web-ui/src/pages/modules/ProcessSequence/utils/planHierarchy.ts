@@ -71,7 +71,7 @@ export function createPlanHierarchy (repository: Repository, sources: Sources) {
     }
     const plan = copy(hasWork(fallback) && !hasWork(saved) ? { ...fallback!, revision: saved?.revision ?? 0 } : saved ?? fallback ?? newPlan(aasId, name))
     stored.set(aasId, saved ? content(saved) : null)
-    if (plan.schema !== 'process-sequence-plan/4.0') {
+    if (plan.schema === 'process-sequence-plan/2.0') {
       plan.schema = 'process-sequence-plan/3.0'
     }
     definitions.set(aasId, plan)
