@@ -1,5 +1,7 @@
 # Process Sequence module
 
+The [flow rules proposal](FLOW_RULES_PROPOSAL.md) describes a future unified step editor, decisions, events and repetition. It is a design proposal; the behavior below describes the implemented module.
+
 Open `/modules/processsequence` without selecting a submodel. **Product to plan** lists AASs with the exact IDTA 02031-1 Process Parameters Type semantic ID. Names and arbitrary files do not qualify a product.
 
 The left tree selects a product, material occurrence or subprocess. The graph contains ordered operations, subprocess calls and parallel branches with an all-branches join, and optional flows with a Run/Skip choice. Selecting a node opens process parameters, material references, capability requirements and station/skill bindings in the inspector. **Combined steps** expands calls and shows precedence for a chosen product number. Cyclic calls are rejected.
