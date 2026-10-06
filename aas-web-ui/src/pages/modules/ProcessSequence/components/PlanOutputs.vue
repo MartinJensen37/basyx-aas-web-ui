@@ -1,5 +1,14 @@
 <template>
-  <InspectorSection collapsible color="secondary" help="Declare values this operation produces, then use them in later decisions. Preview values are entered in Combined steps. Units must match exactly; no conversion is implied." title="Operation outputs">
+  <InspectorSection
+    collapsible
+    color="secondary"
+    help="Declare values this operation produces, then use them in later decisions. Preview values are entered in Combined steps. Units must match exactly; no conversion is implied."
+    :initially-open="false"
+    :summary="`${node.outputs?.length ?? 0} results`"
+    title="Operation outputs"
+  >
+    <p class="text-caption mb-3">Results become available after this operation. Use a result on the diagram to add a decision; results are not automatically passed into the next operation.</p>
+
     <div v-for="output in node.outputs ?? []" :key="output.id" class="mb-4">
       <div class="d-flex ga-1 mb-2">
         <v-text-field v-model="output.name" density="compact" hide-details label="Output name" />

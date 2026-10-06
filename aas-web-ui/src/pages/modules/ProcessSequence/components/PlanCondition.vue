@@ -1,15 +1,5 @@
 <template>
   <InspectorSection collapsible color="secondary" help="A decision checks a value once. Missing values remain unresolved. Output values are supplied in Combined steps for preview; this does not monitor a station." title="Condition">
-    <v-select
-      class="mb-3"
-      density="compact"
-      hide-details
-      :items="[{ title: 'Compare a value', value: 'comparison' }, { title: 'Every N products', value: 'everyNthProduct' }]"
-      label="Condition rule"
-      :model-value="condition.kind"
-      @update:model-value="changeRule"
-    />
-
     <v-text-field
       v-if="condition.kind === 'everyNthProduct'"
       density="compact"
@@ -87,10 +77,6 @@
   })
   const comparisonOperators = computed(() => selected.value?.type === 'number' ? operators : operators.slice(0, 2))
 
-  function changeRule (kind: PlanCondition['kind']): void {
-    numberError.value = ''
-    condition.value = kind === 'everyNthProduct' ? { kind, every: 5 } : newComparison()
-  }
   function setInterval (value: string): void {
     const every = Number(value)
     numberError.value = Number.isSafeInteger(every) && every > 0 ? '' : 'Enter a positive whole number of products.'

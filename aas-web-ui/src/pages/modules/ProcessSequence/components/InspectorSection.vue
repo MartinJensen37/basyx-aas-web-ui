@@ -34,6 +34,7 @@
       </v-tooltip>
 
       <v-spacer />
+      <span v-if="!expanded && summary" class="text-caption text-medium-emphasis">{{ summary }}</span>
       <slot name="actions" />
     </div>
 
@@ -42,8 +43,8 @@
 </template>
 
 <script setup lang="ts">
-  withDefaults(defineProps<{ title: string, help?: string, color?: string, collapsible?: boolean }>(), { help: '', color: 'primary', collapsible: false })
-  const expanded = ref(true)
+  const props = withDefaults(defineProps<{ title: string, help?: string, color?: string, collapsible?: boolean, initiallyOpen?: boolean, summary?: string }>(), { help: '', color: 'primary', collapsible: false, initiallyOpen: true, summary: '' })
+  const expanded = ref(props.initiallyOpen)
   const contentId = useId()
 </script>
 

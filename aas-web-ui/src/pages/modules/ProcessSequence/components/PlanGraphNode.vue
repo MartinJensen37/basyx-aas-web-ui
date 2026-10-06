@@ -1,31 +1,76 @@
 <template>
-  <div class="plan-graph-node" :class="[`plan-graph-node--${data.kind}`, { 'plan-graph-node--selected': active }]" :style="{ height: `${graphNodeHeight[data.kind]}px` }">
-    <Handle v-if="data.kind !== 'start'" :position="Position.Top" type="target" />
+  <div class="plan-graph-node" :class="[`plan-graph-node--${data.kind}`, { 'plan-graph-node--selected': active }]" :style="{ height: `${data.height ?? graphNodeHeight[data.kind]}px` }" @click.capture="node && emit('select')">
+    <Handle v-if="data.kind !== 'start'" id="flow-in" :position="Position.Top" type="target" />
+
+    <PlanNodeType
+      v-if="node"
+      class="nodrag nopan nowheel mx-2 mt-1"
+      compact
+      :node="node"
+      @change="emit('change-type', $event)"
+    />
 
     <button :aria-label="data.title" :aria-pressed="active" class="node-button nodrag" @click="emit('select')">
-      <span v-if="!compact" class="node-category text-uppercase d-flex align-center ga-2">
+      <span v-if="!compact && !node" class="node-category text-uppercase d-flex align-center ga-2">
         <v-icon :icon="icon" size="16" />{{ category }}
       </span>
 
       <span class="node-title font-weight-medium"><v-icon v-if="compact" class="mr-1" :icon="icon" size="16" />{{ data.title }}</span>
-      <span v-if="data.kind === 'conditional' || data.kind === 'decision'" class="text-caption d-block mt-1 text-truncate" :title="data.details || data.subtitle">{{ data.subtitle }}</span>
+
     </button>
+
+    <div v-if="node" class="nodrag nopan nowheel mx-2 mb-1">
+      <PlanOperationType v-if="node.kind === 'step'" compact :node="node" :processes="processes" />
+
+      <PlanChoice
+        v-else-if="node.kind === 'call'"
+        v-model="node.scopeId"
+        compact
+        :context="node.name"
+        :items="targets.map(target => ({ title: target.name, value: target.id }))"
+        label="Subprocess definition"
+      />
+
+      <template v-else-if="node.kind === 'decision' || node.kind === 'conditional'">
+        <PlanConditionKind v-model="node.condition" compact :context="node.name" />
+        <div class="text-caption text-truncate px-2" :title="data.details || data.subtitle">{{ data.subtitle }}</div>
+        <Handle v-if="node.condition.kind === 'comparison' && node.condition.operand?.kind === 'output'" id="condition-input" :position="Position.Right" type="target" />
+      </template>
+    </div>
+
+    <div v-if="node?.kind === 'step' && node.outputs?.length" class="border-t pb-1">
+      <div class="text-caption text-medium-emphasis px-3" style="line-height: 20px">Results</div>
+
+      <div v-for="output in node.outputs" :key="output.id" class="position-relative">
+        <button :aria-label="`Use ${output.name} in decision`" class="result-button nodrag nopan nowheel text-truncate" :title="`${output.type}${output.unit ? ` (${output.unit})` : ''} - Add a decision using this result`" @click="emit('use-output', output.id)">
+          <v-icon icon="mdi-export" size="14" /> {{ output.name }} <span class="text-medium-emphasis">{{ output.unit || output.type }}</span>
+        </button>
+
+        <Handle :id="`output:${output.id}`" :position="Position.Right" type="source" />
+      </div>
+    </div>
 
     <button v-if="data.scopeId" :aria-label="`Open ${data.title}`" class="open-button nodrag" @click="emit('open', data.scopeId)">
       Open subprocess <v-icon icon="mdi-arrow-right" size="14" />
     </button>
 
-    <Handle v-if="data.kind !== 'end'" :position="Position.Bottom" type="source" />
+    <Handle v-if="data.kind !== 'end'" id="flow-out" :position="Position.Bottom" type="source" />
   </div>
 </template>
 
 <script setup lang="ts">
+  import type { PlanNode, PlanProcess } from '../types/plan'
   import type { PlanGraphData } from '../utils/planGraph'
   import { Handle, Position } from '@vue-flow/core'
   import { graphNodeHeight } from '../utils/planGraph'
+  import PlanChoice from './PlanChoice.vue'
+  import PlanConditionKind from './PlanConditionKind.vue'
+  import PlanNodeType from './PlanNodeType.vue'
+  import PlanOperationType from './PlanOperationType.vue'
 
-  const props = defineProps<{ data: PlanGraphData, active: boolean }>()
-  const emit = defineEmits<{ select: [], open: [id: string] }>()
+  const props = defineProps<{ data: PlanGraphData, active: boolean, processes: PlanProcess[], targets: { id: string, name: string }[] }>()
+  const emit = defineEmits<{ 'select': [], 'open': [id: string], 'change-type': [kind: PlanNode['kind']], 'use-output': [outputId: string] }>()
+  const node = defineModel<PlanNode>('node')
   const compact = computed(() => ['start', 'end', 'branch', 'join', 'skip', 'merge'].includes(props.data.kind))
   const category = computed(() => ({ step: 'Process', call: 'Subprocess', parallel: 'Parallel split', decision: 'Decision', conditional: 'Optional flow', merge: 'Selected path', skip: 'Skip', join: 'Parallel join', branch: 'Branch', start: 'Sequence', end: 'Sequence' })[props.data.kind])
   const icon = computed(() => ({ step: 'mdi-cog-outline', call: 'mdi-file-tree-outline', parallel: 'mdi-call-split', decision: 'mdi-help-rhombus-outline', conditional: 'mdi-directions-fork', merge: 'mdi-call-merge', skip: 'mdi-debug-step-over', join: 'mdi-call-merge', branch: 'mdi-source-branch', start: 'mdi-play-outline', end: 'mdi-check' })[props.data.kind])
@@ -56,6 +101,18 @@
   color: rgb(var(--v-theme-on-surface));
   cursor: pointer;
 }
+.result-button {
+  display: block;
+  width: 100%;
+  height: 28px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  font-size: 12px;
+  color: rgb(var(--v-theme-secondary));
+  cursor: pointer;
+}
 .node-category {
   font-size: 10px;
   line-height: 18px;
@@ -70,7 +127,7 @@
   font-size: 16px;
   line-height: 20px;
 }
-.node-button:focus-visible, .open-button:focus-visible {
+.node-button:focus-visible, .open-button:focus-visible, .result-button:focus-visible {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: 3px;
 }

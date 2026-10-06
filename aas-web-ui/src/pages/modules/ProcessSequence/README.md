@@ -4,9 +4,19 @@ The [flow rules proposal](FLOW_RULES_PROPOSAL.md) describes the broader directio
 
 Open `/modules/processsequence` without selecting a submodel. **Product to plan** lists AASs with the exact IDTA 02031-1 Process Parameters Type semantic ID. Names and arbitrary files do not qualify a product.
 
-The left tree selects a product, material occurrence or subprocess. Use **Add step**, then **Step type** to choose Operation, Subprocess, Decision, Parallel or Optional. The graph generates all-branch parallel joins and selected-path decision merges. Selecting a node opens its configuration in the inspector. **Combined steps** expands calls and previews the chosen paths for a product number and simulated outputs. Cyclic calls are rejected.
+The left tree selects a product, material occurrence or subprocess. Use **Add step**, then **Step type** to choose Operation, Subprocess, Decision, Parallel or Optional. The graph generates all-branch parallel joins and selected-path decision merges. The type dropdown on each diagram card changes the step kind. Its second dropdown selects the operation, subprocess definition or condition rule. Selecting a node opens its configuration in the inspector. **Combined steps** expands calls and previews the chosen paths for a product number and simulated outputs. Cyclic calls are rejected.
 
 Each assembly AAS owns one canonical sequence. A parent material occurrence references that owner; it does not duplicate the child steps. Editing an assembly directly or through its parent saves the same definition. Missing sequences start empty. Shared parts can occur in several products. Save before changing product; browser drafts recover quietly within the same tab. **Reload plans** archives the current browser draft and loads the server version. There are no draft-download reminders or BPMN editor.
+
+## Editing operations and results
+
+**Operation type**, directly below **Name** in the inspector and on the diagram card, selects a process from the product's Process Parameters submodel. It refreshes the parameter snapshot and inherited capability requirements, clears step-specific requirement overrides and clears the previous station, skill and input bindings. Match the new operation again or leave it unassigned. Custom names and declared output identities are retained; review outputs when changing the operation. Selecting the same operation preserves edits. The execution mode remains an explicit choice because Process Parameters does not prescribe manual versus station execution.
+
+Process inputs, Capabilities, Resource assignment and Operation outputs start collapsed with concise summaries. **Match resources** remains visible in the Capabilities header.
+
+Declare an output such as Boolean `Passed` under **Operation outputs**. It then appears in the diagram card's Results area. Click that result to insert a decision immediately after its producer in the same branch, with the result reference already selected. Boolean comparisons start at `true`; numeric and text results start at `0` and empty text and should be configured in the inspector.
+
+Solid arrows show execution order. Selecting a producer or consuming decision shows a dashed result connection between them. These are two different relationships: outputs are runtime results, while Process inputs are recipe snapshots. Results are not automatically wired to the next operation or to a station skill. Output references currently feed explicit conditions within the same scope and follow the availability rules below. **Combined steps** accepts simulated result values; the editor does not execute stations.
 
 ## Decisions and type changes
 
@@ -63,10 +73,10 @@ Browser tests use the current checkout UI and a disposable repository: set `IT_D
 
 ## Periodic inspection and optional flows
 
-Select an inspection step and choose **Make optional**. Set **Run every N products** to 5 to inspect products 5, 10, 15, etc. in each production run. The graph shows the inspection path and a skip path that rejoins before the next operation. **Run every product** removes the condition and preserves its operations. **Optional flow** in the toolbar creates an empty conditional flow; select **Run this flow** to add steps or subprocess calls inside it. Parallel groups and nested optional flows are also supported.
+Select an inspection step and choose **Optional** from **Step type**. Set **Run every N products** to 5 to inspect products 5, 10, 15, etc. in each production run. The graph shows the inspection path and a skip path that rejoins before the next operation. **Remove condition** removes the condition and preserves its operations. **Add step**, followed by **Step type: Optional**, creates an empty conditional flow; select **Run this flow** to add steps or subprocess calls inside it. Parallel groups and nested optional flows are also supported.
 
 The product number is one-based and belongs to the current production run. Every called subprocess receives the same product number; entering a subprocess or retrying an operation does not advance the counter. Nested intervals must both match. This is a plan definition: the execution system must supply and preserve the product ordinal across retries and reset it when starting a new run. No live equipment counter is simulated by the editor.
 
-In **Combined steps**, change **Product number in run** to preview both paths. Skipped operations do not become required predecessors. The saved condition is an AAS collection with semantic IDs for ConditionType, EveryNProducts and CounterScope. Definitions containing optional flows use PlanSchema `process-sequence-plan/4.0`; older 2.0/3.0 plans remain readable. See the template contract for details.
+In **Combined steps**, change **Product number in run** to preview both paths. Skipped operations do not become required predecessors. The saved condition is an AAS collection with semantic IDs for ConditionType, EveryNProducts and CounterScope. Periodic-only definitions use PlanSchema `process-sequence-plan/4.0`; typed comparisons, output contracts or parameter units require `5.0`. Older plans remain readable. See the template contract for details.
 
 The prepared **Vial 2 mL - inspection every 5** recipe demonstrates this flow without changing the existing recipes.

@@ -12,10 +12,11 @@ export interface PlanGraphData {
   planId?: string
   branchId?: string
   scopeId?: string
+  height?: number
 }
 
 export const graphNodeHeight: Record<PlanGraphData['kind'], number> = {
-  step: 96, call: 120, parallel: 96, conditional: 120, decision: 120, branch: 56, join: 56, skip: 56, merge: 56, start: 48, end: 48,
+  step: 132, call: 160, parallel: 96, conditional: 164, decision: 164, branch: 56, join: 56, skip: 56, merge: 56, start: 48, end: 48,
 }
 
 export const conditionalLaneId = (id: string) => `conditional-run:${id}`
@@ -50,7 +51,7 @@ export function findLane (nodes: PlanNode[], id: string): { nodes: PlanNode[], i
 }
 
 /** A projection only: positions and presentation nodes never enter the saved plan. */
-export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, name: string }[]): { nodes: Node<PlanGraphData>[], edges: Edge[] } {
+export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, name: string }[], selectedId = ''): { nodes: Node<PlanGraphData>[], edges: Edge[] } {
   const nodes: Node<PlanGraphData>[] = []
   const edges: Edge[] = []
   const options = conditionOptions(flattenNodes(sequence))
@@ -71,6 +72,7 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
   function connect (source: string, target: string): void {
     edges.push({
       id: JSON.stringify([source, target]), source, target, type: 'smoothstep',
+      sourceHandle: 'flow-out', targetHandle: 'flow-in',
       markerEnd: MarkerType.ArrowClosed, style: { stroke: '#78909c', strokeWidth: 2 },
     })
   }
@@ -95,14 +97,16 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
         }
         // No default
       }
+      const height = graphNodeHeight[node.kind] + (node.kind === 'step' && node.outputs?.length ? 24 + 28 * node.outputs.length : 0)
       const id = add(`node:${node.id}`, x, y, {
         title: node.name, kind: node.kind, planId: node.id,
+        height,
         scopeId: node.kind === 'call' ? node.scopeId : undefined,
         details: node.kind === 'decision' || node.kind === 'conditional' ? conditionLabel(node.condition, options) : undefined,
         subtitle,
       })
       connect(last, id)
-      y += graphNodeHeight[node.kind] + gap
+      y += height + gap
       if (node.kind !== 'step' && node.kind !== 'call') {
         const branches = (node.kind === 'parallel' || node.kind === 'decision')
           ? node.branches
@@ -143,5 +147,27 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
   const start = add('start', 0, 0, { title: 'Start', subtitle: 'Insert at sequence start', kind: 'start' })
   const end = layout(sequence, 0, graphNodeHeight.start + gap, start)
   connect(end.last, add('end', 0, end.y, { title: 'Complete', subtitle: 'Append to sequence', kind: 'end' }))
+  const all = flattenNodes(sequence)
+  for (const node of all) {
+    if ((node.kind !== 'decision' && node.kind !== 'conditional') || node.condition.kind !== 'comparison') {
+      continue
+    }
+    const operand = node.condition.operand
+    if (operand?.kind !== 'output' || (node.id !== selectedId && operand.stepId !== selectedId)) {
+      continue
+    }
+    const producer = all.find(item => item.id === operand.stepId)
+    const output = producer?.kind === 'step' ? producer.outputs?.find(item => item.id === operand.outputId) : undefined
+    if (!output || !producer) {
+      continue
+    }
+    edges.push({
+      id: `result:${node.id}`, source: `node:${producer.id}`, target: `node:${node.id}`,
+      sourceHandle: `output:${output.id}`, targetHandle: 'condition-input', type: 'smoothstep',
+      label: output.name, ariaLabel: `${output.name} from ${producer.name} to ${node.name}`,
+      data: { kind: 'result' }, markerEnd: MarkerType.ArrowClosed,
+      style: { stroke: '#7e57c2', strokeWidth: 2, strokeDasharray: '6 4' },
+    })
+  }
   return { nodes, edges }
 }

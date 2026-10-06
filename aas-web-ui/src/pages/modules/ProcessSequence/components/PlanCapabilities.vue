@@ -1,5 +1,12 @@
 <template>
-  <InspectorSection collapsible color="success" help="Matches capability meanings, values, ranges and units across all resources. Choose one station skill per step. Availability and additional constraints require separate checks." title="Capabilities">
+  <InspectorSection
+    collapsible
+    color="success"
+    help="Matches capability meanings, values, ranges and units across all resources. Choose one station skill per step. Availability and additional constraints require separate checks."
+    :initially-open="false"
+    :summary="`${requirements.length} required`"
+    title="Capabilities"
+  >
     <template #actions>
       <v-btn
         color="blue-darken-2"
@@ -86,7 +93,7 @@
   })
 
   watch(owners, refresh, { immediate: true })
-  watch(() => node.value.id, () => {
+  watch(() => [node.value.id, node.value.process], () => {
     showMatches.value = false
   })
   onBeforeUnmount(() => generation++)
@@ -98,11 +105,12 @@
 
   async function assign (match: CapabilityMatch): Promise<void> {
     const selectedNode = node.value
+    const selectedProcess = selectedNode.process
     binding.value = true
     error.value = ''
     try {
       const skills = await loadSkills(match.aasId)
-      if (node.value !== selectedNode) return
+      if (node.value !== selectedNode || node.value.process !== selectedProcess) return
       const skill = skills.find(skill => skill.reference && match.capabilities.every(capability => capability.realizedBy.some(reference => referenceKey(reference) === referenceKey(skill.reference!))))
       if (!skill) {
         error.value = 'No single skill is linked to all matching capabilities. Select and verify a skill explicitly.'

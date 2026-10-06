@@ -3,7 +3,7 @@
     <v-card-title class="text-body-large">{{ node ? 'Selection details' : 'Sequence details' }}</v-card-title>
 
     <v-card-text v-if="node">
-      <PlanNodeType :key="node.id" :node="node" @change="emit('change-type', $event)" />
+      <PlanNodeType :key="node.id" class="mb-3" :node="node" @change="emit('change-type', $event)" />
 
       <v-btn
         v-if="canUndo"
@@ -22,6 +22,8 @@
         label="Name"
       />
 
+      <PlanOperationType v-if="node.kind === 'step'" class="mb-3" :node="node" :processes="processes" />
+
       <InspectorSection v-if="node.kind === 'call'" help="The next step waits for this entire subprocess to complete." title="Subprocess">
         <v-select
           v-model="node.scopeId"
@@ -34,7 +36,10 @@
 
       </InspectorSection>
 
-      <PlanCondition v-else-if="node.kind === 'conditional' || node.kind === 'decision'" :key="node.id" v-model="node.condition" :nodes="nodes" />
+      <template v-else-if="node.kind === 'conditional' || node.kind === 'decision'">
+        <PlanConditionKind v-model="node.condition" class="mb-3" />
+        <PlanCondition :key="node.id" v-model="node.condition" :nodes="nodes" />
+      </template>
 
       <InspectorSection v-else-if="node.kind === 'parallel'" color="warning" help="All branches start together and join before the next step. Select a branch on the graph to insert operations. Only empty extra branches can be removed." title="Parallel branches">
 
@@ -55,27 +60,27 @@
       </InspectorSection>
 
       <template v-else>
-        <InspectorSection collapsible help="Select process inputs from the Process Parameters submodel. Values are snapshots; source references and datatypes are available on hover." title="Process inputs">
-          <v-select
-            class="mb-3"
-            clearable
-            density="compact"
-            hide-details="auto"
-            item-title="name"
-            item-value="key"
-            :items="processOptions"
-            label="Process Parameters entry"
-            :model-value="node.process ? JSON.stringify(node.process.source) : null"
-            @update:model-value="linkProcess"
-          />
-
+        <InspectorSection
+          collapsible
+          help="Recipe inputs are snapshots from the selected operation in the Process Parameters submodel. Hover over a value for its source and datatype."
+          :initially-open="false"
+          :summary="`${node.process?.parameters.length ?? 0} parameters`"
+          title="Process inputs"
+        >
           <PlanParameters v-if="node.process" :process="node.process" />
         </InspectorSection>
 
         <PlanCapabilities v-model="node" :inherited="inheritedRequirements" :resources="resources" />
         <PlanOutputs v-model="node" />
 
-        <InspectorSection collapsible color="info" help="Assign one station skill, choose a manual operation, or leave the resource unassigned until later. Capability matching compares all available resources." title="Resource assignment">
+        <InspectorSection
+          collapsible
+          color="info"
+          help="Assign one station skill, choose a manual operation, or leave the resource unassigned until later. Capability matching compares all available resources."
+          :initially-open="false"
+          :summary="resourceSummary"
+          title="Resource assignment"
+        >
           <v-select
             class="mb-3"
             density="compact"
@@ -107,7 +112,9 @@
   import PlanBindings from './PlanBindings.vue'
   import PlanCapabilities from './PlanCapabilities.vue'
   import PlanCondition from './PlanCondition.vue'
+  import PlanConditionKind from './PlanConditionKind.vue'
   import PlanNodeType from './PlanNodeType.vue'
+  import PlanOperationType from './PlanOperationType.vue'
   import PlanOutputs from './PlanOutputs.vue'
   import PlanParameters from './PlanParameters.vue'
 
@@ -120,31 +127,14 @@
   }>()
   const emit = defineEmits<{ 'change-type': [kind: PlanNode['kind']], 'undo-type': [], 'unwrap': [] }>()
   const node = defineModel<PlanNode | undefined>()
+  const resourceSummary = computed(() => {
+    const step = node.value
+    return step?.kind === 'step' ? (step.executionMode === 'manual' ? 'Manual' : props.resources.find(resource => resource.id === step.resourceAasId)?.name || 'Unassigned') : ''
+  })
   const inheritedRequirements = computed(() => {
     const process = node.value?.kind === 'step' ? node.value.process : null
     return process?.requiredCapabilities ?? props.processes.find(item => JSON.stringify(item.source) === JSON.stringify(process?.source))?.requiredCapabilities ?? []
   })
-  const processOptions = computed(() => {
-    const processes = [...props.processes]
-    const selected = node.value?.kind === 'step' ? node.value.process : null
-    if (selected && !processes.some(item => JSON.stringify(item.source) === JSON.stringify(selected.source))) {
-      processes.push(selected)
-    }
-    return processes.map(process => ({ name: process.name, process, key: JSON.stringify(process.source) }))
-  })
-
-  function linkProcess (key: string | null): void {
-    if (node.value?.kind !== 'step') {
-      return
-    }
-    const process = processOptions.value.find(item => item.key === key)?.process
-    node.value.process = process ? structuredClone(toRaw(process)) : null
-    delete node.value.requiredCapabilities
-    node.value.bindings = node.value.bindings.filter(binding => !binding.source)
-    if (process && node.value.name === 'New step') {
-      node.value.name = process.name
-    }
-  }
   function setExecution (mode: 'manual' | 'station'): void {
     if (node.value?.kind !== 'step') return
     node.value.executionMode = mode

@@ -72,8 +72,10 @@
             :key="selectedScopeId"
             v-model="scope.nodes"
             :label="`${scope.name} sequence`"
+            :processes="availableProcesses"
             :selected-id="selectedNodeId"
             :targets="targets"
+            @change-type="(id, kind) => { selectedNodeId = id; changeType(kind) }"
             @open="selectedScopeId = $event"
             @select="selectedNodeId = $event"
           />

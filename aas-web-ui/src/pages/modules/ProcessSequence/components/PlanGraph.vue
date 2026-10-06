@@ -40,6 +40,8 @@
       </template>
     </div>
 
+    <p v-if="graph.edges.some(edge => edge.data?.kind === 'result')" class="text-caption px-3 pb-2">Solid arrows: execution order | Dashed arrows: result used by a condition</p>
+
     <div :aria-label="label" class="plan-canvas" role="region">
       <VueFlow
         :id="flowId"
@@ -61,8 +63,13 @@
           <PlanGraphNode
             :active="data.planId ? data.planId === selectedId : !selectedId && id === insertionId"
             :data="data"
+            :node="id.startsWith('node:') ? nodeMap.get(data.planId) : undefined"
+            :processes="processes"
+            :targets="targets"
+            @change-type="emit('change-type', data.planId!, $event)"
             @open="emit('open', $event)"
             @select="select(id, data)"
+            @use-output="useOutput(data.planId!, $event)"
           />
         </template>
       </VueFlow>
@@ -71,11 +78,12 @@
 </template>
 
 <script setup lang="ts">
-  import type { PlanNode } from '../types/plan'
+  import type { PlanNode, PlanProcess } from '../types/plan'
   import type { PlanGraphData } from '../utils/planGraph'
   import { Background } from '@vue-flow/background'
   import { Controls } from '@vue-flow/controls'
   import { useVueFlow, VueFlow } from '@vue-flow/core'
+  import { decisionForOutput } from '../utils/outputDecision'
   import { flattenNodes, newNode } from '../utils/plan'
   import { buildPlanGraph, findLane } from '../utils/planGraph'
   import PlanGraphNode from './PlanGraphNode.vue'
@@ -83,14 +91,15 @@
   import '@vue-flow/core/dist/theme-default.css'
   import '@vue-flow/controls/dist/style.css'
 
-  const props = defineProps<{ label: string, selectedId: string, targets: { id: string, name: string }[] }>()
-  const emit = defineEmits<{ select: [id: string], open: [id: string] }>()
+  const props = defineProps<{ label: string, selectedId: string, processes: PlanProcess[], targets: { id: string, name: string }[] }>()
+  const emit = defineEmits<{ 'select': [id: string], 'open': [id: string], 'change-type': [id: string, kind: PlanNode['kind']] }>()
   const nodes = defineModel<PlanNode[]>({ required: true })
   const flowId = `process-plan-${useId()}`
   const { fitView } = useVueFlow({ id: flowId })
   const insertionId = ref('end')
   const branchId = ref('')
-  const graph = computed(() => buildPlanGraph(nodes.value, props.targets))
+  const graph = computed(() => buildPlanGraph(nodes.value, props.targets, props.selectedId))
+  const nodeMap = computed(() => new Map(flattenNodes(nodes.value).map(node => [node.id, node])))
   const selected = computed(() => flattenNodes(nodes.value).find(node => node.id === props.selectedId))
   const location = computed(() => findLane(nodes.value, props.selectedId || branchId.value))
   const insertionLabel = computed(() => {
@@ -116,6 +125,17 @@
     else nodes.value.splice(insertionId.value === 'start' ? 0 : nodes.value.length, 0, node)
     branchId.value = ''
     emit('select', node.id)
+  }
+
+  function useOutput (id: string, outputId: string): void {
+    const producer = nodeMap.value.get(id)
+    const lane = findLane(nodes.value, id)
+    const output = producer?.kind === 'step' ? producer.outputs?.find(item => item.id === outputId) : undefined
+    if (producer?.kind !== 'step' || !output || !lane) return
+    const decision = decisionForOutput(producer, output)
+    lane.nodes.splice(lane.index + 1, 0, decision)
+    branchId.value = ''
+    emit('select', decision.id)
   }
 
   function move (delta: number): void {
