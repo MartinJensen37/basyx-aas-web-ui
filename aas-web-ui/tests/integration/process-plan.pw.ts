@@ -158,7 +158,7 @@ test('authors assembly sequences and parallel subprocesses, then reloads the ser
   await page.getByRole('option', { name: 'Prepare', exact: true }).click()
   await page.keyboard.press('Escape')
   await expect(page.getByText('Step override', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: /^Resource parameters/ })).toBeVisible()
+  await expect(page.getByRole('tree', { name: 'Process parameter tree', exact: true }).getByRole('treeitem', { name: /^Resource parameters/ })).toBeVisible()
   await page.getByRole('combobox', { name: 'Resource (optional)' }).fill('PlanIntegrationResource')
   await page.keyboard.press('ArrowDown')
   await page.getByRole('option', { name: 'PlanIntegrationResource', exact: true }).click()

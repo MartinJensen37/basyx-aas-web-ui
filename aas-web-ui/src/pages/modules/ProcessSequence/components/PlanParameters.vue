@@ -1,52 +1,57 @@
-<template>
-  <div>
-    <v-expansion-panels multiple variant="accordion">
-      <v-expansion-panel v-for="group in groups" :key="group.id" class="parameter-group" :style="{ '--group-color': `var(--v-theme-${group.color})` }">
-        <v-expansion-panel-title>
-          <span class="text-body-small font-weight-medium">{{ group.title }}</span>
-          <v-chip class="ml-2" :color="group.color" size="x-small">{{ process.parameters.filter(item => item.group === group.id).length }}</v-chip>
-        </v-expansion-panel-title>
+﻿<template>
+  <v-treeview
+    aria-label="Process parameter tree"
+    class="parameter-tree"
+    density="compact"
+    item-value="id"
+    :items="items"
+    open-all
+  >
+    <template #prepend="{ item }">
+      <v-icon :color="item.color" :icon="item.children ? 'mdi-folder-outline' : 'mdi-tune-variant'" size="small" />
+    </template>
 
-        <v-expansion-panel-text>
-          <div v-for="parameter in process.parameters.filter(item => item.group === group.id)" :key="JSON.stringify(parameter.source)" class="d-flex justify-space-between ga-3 py-1">
-            <v-tooltip location="top" :text="`${parameter.dataType} · ${parameter.source.path.join(' / ')}`">
-              <template #activator="{ props: activator }"><span v-bind="activator" class="text-body-small" tabindex="0">{{ parameter.name }}</span></template>
-            </v-tooltip>
+    <template #title="{ item }">
+      <v-tooltip v-if="item.help" location="top" max-width="320" :text="item.help">
+        <template #activator="{ props: activator }"><span v-bind="activator" class="text-body-small text-break" tabindex="0">{{ item.title }}</span></template>
+      </v-tooltip>
 
-            <span class="text-body-small font-weight-medium text-break">{{ parameter.value || 'Not set' }}</span>
-          </div>
+      <span v-else class="text-body-small text-break" :class="{ 'font-weight-medium': item.children }">{{ item.title }}</span>
+      <div v-if="item.value !== undefined" class="text-body-small text-medium-emphasis text-break">{{ item.value }}</div>
+    </template>
 
-          <span v-if="!process.parameters.some(item => item.group === group.id)" class="text-caption text-medium-emphasis">No parameters</span>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-
-      <v-expansion-panel title="Process materials">
-        <v-expansion-panel-text>
-          <span v-if="process.material.length === 0" class="text-caption text-medium-emphasis">No materials</span>
-          <div v-for="(material, index) in materialLabels(process.material)" :key="index" class="text-body-small mb-2">{{ material }}</div>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-    </v-expansion-panels>
-  </div>
+    <template #append="{ item }">
+      <v-chip v-if="item.children" :color="item.color" size="x-small">{{ item.children.length }}</v-chip>
+    </template>
+  </v-treeview>
 </template>
 
 <script setup lang="ts">
   import type { PlanProcess } from '../types/plan'
   import { materialLabels } from '../utils/planSources'
 
-  defineProps<{ process: PlanProcess }>()
+  type ParameterItem = { id: string, title: string, color?: string, help?: string, value?: string, children?: ParameterItem[] }
+
+  const props = defineProps<{ process: PlanProcess }>()
   const groups = [
     { id: 'ProductParameters', title: 'Product parameters', color: 'primary' },
     { id: 'ProcessParameters', title: 'Process parameters', color: 'success' },
     { id: 'ResourceParameters', title: 'Resource parameters', color: 'warning' },
   ]
+  const items = computed<ParameterItem[]>(() => [
+    ...groups.map(group => ({
+      ...group,
+      children: props.process.parameters.filter(parameter => parameter.group === group.id).map(parameter => ({
+        id: JSON.stringify(parameter.source), title: parameter.name, value: parameter.value || 'Not set',
+        help: `${parameter.dataType} · ${parameter.source.path.join(' / ')}`,
+      })),
+    })),
+    { id: 'materials', title: 'Process materials', children: materialLabels(props.process.material).map((title, index) => ({ id: `material:${index}`, title })) },
+  ])
 </script>
 
 <style scoped>
-.parameter-group {
-  border-left: 3px solid rgb(var(--group-color));
-}
-.parameter-group :deep(.v-expansion-panel-title) {
-  background: rgba(var(--group-color), 0.08);
+.parameter-tree :deep(.v-list-item-title) {
+  white-space: normal;
 }
 </style>

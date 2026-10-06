@@ -1,5 +1,5 @@
 <template>
-  <InspectorSection color="success" help="Matches capability meanings, values, ranges and units across all resources. Choose one station skill per step. Availability and additional constraints require separate checks." title="Capabilities">
+  <InspectorSection collapsible color="success" help="Matches capability meanings, values, ranges and units across all resources. Choose one station skill per step. Availability and additional constraints require separate checks." title="Capabilities">
     <template #actions>
       <v-btn
         color="blue-darken-2"

@@ -44,7 +44,7 @@
       </InspectorSection>
 
       <template v-else>
-        <InspectorSection help="Select process inputs from the Process Parameters submodel. Values are snapshots; source references and datatypes are available on hover." title="Process inputs">
+        <InspectorSection collapsible help="Select process inputs from the Process Parameters submodel. Values are snapshots; source references and datatypes are available on hover." title="Process inputs">
           <v-select
             class="mb-3"
             clearable
@@ -63,7 +63,7 @@
 
         <PlanCapabilities v-model="node" :inherited="inheritedRequirements" :resources="resources" />
 
-        <InspectorSection color="info" help="Assign one station skill, choose a manual operation, or leave the resource unassigned until later. Capability matching compares all available resources." title="Resource assignment">
+        <InspectorSection collapsible color="info" help="Assign one station skill, choose a manual operation, or leave the resource unassigned until later. Capability matching compares all available resources." title="Resource assignment">
           <v-select
             class="mb-3"
             density="compact"

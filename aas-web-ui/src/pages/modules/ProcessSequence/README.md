@@ -30,7 +30,7 @@ The inspector shows station comparisons and can assign a skill through the capab
 
 The blue **Match resources** button in the Capabilities box opens a chooser for all candidate stations. Each match has a visible **Use resource** button; **Comparison details** expands its property checks. When several stations match, choose one explicitly. The plan stores one selected resource/skill per step; it does not store an alternative-resource pool or schedule by station availability. Assignment requires a single skill linked to all matched capabilities. **No resource** clears the assignment, skill reference and bindings, and can be saved for later planning.
 
-Selection details group product, process and resource parameters by color. Section help, parameter datatypes and capability reference paths are available in tooltips. Planning-check summaries are omitted from the panel; structural validation still runs when saving.
+Selection details show product, process and resource parameters as branches in a tree, alongside process materials. Process inputs, Capabilities and Resource assignment can each be collapsed without clearing their fields. The matching button stays accessible in the Capabilities header. Section help, parameter datatypes and capability reference paths are available in tooltips. Planning-check summaries are omitted from the panel; structural validation still runs when saving.
 
 ## Persistence and integration
 
