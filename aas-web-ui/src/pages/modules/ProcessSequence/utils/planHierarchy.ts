@@ -3,9 +3,10 @@ import { flattenNodes, newPlan, parsePlan } from './plan'
 import { extractAssembly } from './planTree'
 
 type Repository = {
-  load: (id: string) => Promise<ProcessPlan | null>
+  load: (id: string, sequenceId?: string) => Promise<ProcessPlan | null>
   save: (plan: ProcessPlan) => Promise<ProcessPlan>
   check: (id: string) => Promise<void>
+  needsMigration?: (id: string) => boolean
 }
 type Sources = {
   loadScope: (id: string, root: string) => Promise<{ processes: PlanProcess[], scopes: PlanScope[] }>
@@ -51,17 +52,21 @@ export function createPlanHierarchy (repository: Repository, sources: Sources) {
     return compose()
   }
 
-  async function visit (aasId: string, name: string, ancestors: Set<string>, fallback?: ProcessPlan, linked = false): Promise<void> {
+  async function visit (aasId: string, name: string, ancestors: Set<string>, fallback?: ProcessPlan, linked = false, sequenceId?: string): Promise<void> {
     if (ancestors.has(aasId)) {
       throw new Error(`Cyclic assembly plan reference at ${name}.`)
     }
     if (definitions.has(aasId)) {
+      const existing = definitions.get(aasId)!
+      if (sequenceId && existing.scopes.find(scope => scope.id === existing.rootScopeId)?.sequenceId !== sequenceId) {
+        throw new Error(`Conflicting primary sequence references for ${name}.`)
+      }
       if (fallback?.scopes.some(scope => scope.nodes.length > 0) && content(definitions.get(aasId)!) !== content(fallback)) {
         throw new Error(`Repeated inline occurrences of ${name} have different definitions. Reconcile them before sharing this assembly.`)
       }
       return
     }
-    const saved = await repository.load(aasId)
+    const saved = await repository.load(aasId, sequenceId)
     if (linked && !saved) {
       throw new Error(`The shared plan for ${name} is missing. Restore it before editing this hierarchy.`)
     }
@@ -90,11 +95,12 @@ export function createPlanHierarchy (repository: Repository, sources: Sources) {
         continue
       }
       const subtree = extractAssembly(plan, scope.id, owner)
-      await visit(owner, scope.name, next, subtree, !!scope.planAasId)
+      await visit(owner, scope.name, next, subtree, !!scope.planAasId, scope.sequenceId)
       const descendants = new Set(subtree.scopes.filter(item => item.id !== scope.id).map(item => item.id))
       plan.scopes = plan.scopes.filter(item => !descendants.has(item.id))
       scope.nodes = []
       scope.planAasId = owner
+      scope.sequenceId = definitions.get(owner)!.scopes.find(item => item.id === definitions.get(owner)!.rootScopeId)?.sequenceId
     }
   }
 
@@ -211,7 +217,7 @@ export function createPlanHierarchy (repository: Repository, sources: Sources) {
       ordered.push(definition)
     }
     visit(rootOwner)
-    const changed = ordered.filter(plan => stored.get(plan.productAasId) !== content(plan))
+    const changed = ordered.filter(plan => stored.get(plan.productAasId) !== content(plan) || repository.needsMigration?.(plan.productAasId))
     await Promise.all(changed.map(plan => repository.check(plan.productAasId)))
     let completed = 0
     try {
@@ -237,7 +243,7 @@ export function createPlanHierarchy (repository: Repository, sources: Sources) {
   }
 
   function hasUnsavedDefinitions (): boolean {
-    return [...stored.values()].includes(null)
+    return [...stored].some(([id, value]) => value === null || repository.needsMigration?.(id))
   }
 
   return { load, save, synchronize, processes, owner, canTarget, remappedIds, hasUnsavedDefinitions }

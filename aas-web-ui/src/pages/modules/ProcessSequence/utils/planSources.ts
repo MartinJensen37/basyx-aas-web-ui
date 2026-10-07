@@ -1,6 +1,6 @@
-import type { PlanParameter, PlanProcess, PlanScope, SourceReference } from '../types/plan'
-import { PROCESS_STEP_CAPABILITY_SEMANTIC_ID } from '../constants/contracts'
-import { capabilityReferenceSchema } from '../types/plan'
+import type { PlanParameter, PlanProcess, PlanScope, SourceReference } from '../types/plan.ts'
+import { PROCESS_STEP_CAPABILITY_SEMANTIC_ID } from '../constants/contracts.ts'
+import { capabilityReferenceSchema } from '../types/plan.ts'
 
 type Element = Record<string, any>
 

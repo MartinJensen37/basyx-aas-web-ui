@@ -62,7 +62,7 @@
       <template v-else>
         <InspectorSection
           collapsible
-          help="Recipe inputs are snapshots from the selected operation in the Process Parameters submodel. Hover over a value for its source and datatype."
+          help="Recipe inputs inherit the selected Process Parameters definition. Edited values are saved as overrides. Hover over a value for its source and datatype."
           :initially-open="false"
           :summary="`${node.process?.parameters.length ?? 0} parameters`"
           title="Process inputs"

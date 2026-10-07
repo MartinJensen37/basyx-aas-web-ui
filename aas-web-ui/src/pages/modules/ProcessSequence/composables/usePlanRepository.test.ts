@@ -1,7 +1,10 @@
+import type { AasElement } from '../utils/sequenceModel'
 import { jsonization } from '@aas-core-works/aas-core3.1-typescript'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { buildDemo } from '../demo/seed'
 import { newPlan } from '../utils/plan'
-import { buildSequenceSubmodel } from '../utils/sequenceModel'
+import { defaultSequenceId } from '../utils/sequenceDocuments'
+import { buildSequenceSubmodel, field } from '../utils/sequenceModel'
 import { buildPlanSubmodel, planSubmodelId, usePlanRepository } from './usePlanRepository'
 
 const mocks = vi.hoisted(() => ({
@@ -42,6 +45,33 @@ describe('plan persistence', () => {
     mocks.getRequest.mockResolvedValue({ success: true, data: { submodelElements: [{ modelType: 'File', idShort: 'Definition', value: '/attachment.json' }] } })
     mocks.fetchAttachmentFile.mockResolvedValue({ text: async () => JSON.stringify(saved) })
     expect(await repository.load('urn:product')).toEqual(saved)
+  })
+
+  it('resolves separately stored subprocesses and detects changed process sources before saving', async () => {
+    const demo = buildDemo()
+    const models = new Map<string, AasElement>(demo.submodels.map(model => [model.id, structuredClone(model)]))
+    const owner = demo.plans[0]!.productAasId
+    mocks.getSubmodelRefsById.mockImplementation(async id => demo.shells.find(shell => shell.id === id)!.submodels)
+    mocks.getRequest.mockImplementation(async endpoint => {
+      const model = models.get(endpoint.replace('https://example.test/submodels/', ''))
+      return model ? { success: true, data: structuredClone(model) } : { success: false, status: 404 }
+    })
+    mocks.putSubmodel.mockImplementation(async model => {
+      models.set(model.id, jsonization.toJsonable(model) as AasElement)
+      return true
+    })
+    const repository = usePlanRepository()
+    const plan = (await repository.load(owner))!
+    expect(plan.scopes.some(scope => scope.name === 'Drive inspection')).toBe(true)
+    plan.scopes[0]!.nodes[0]!.name = 'Edited preparation'
+    await repository.save(plan)
+    expect((await repository.load(owner))!.scopes[0]!.nodes[0]!.name).toBe('Edited preparation')
+    expect(field(models.get(defaultSequenceId(owner))!, 'Scopes')).toBeUndefined()
+    const processSource = models.get(`${owner.replace('/aas/', '/sm/')}/ProcessParameters`)!
+    processSource.submodelElements[0].value[0].value.find((element: AasElement) => element.idShort === 'ProcessName').value = 'Changed externally'
+    mocks.putSubmodel.mockClear()
+    await expect(repository.save(plan)).rejects.toThrow('changed in another view')
+    expect(mocks.putSubmodel).not.toHaveBeenCalled()
   })
 
   it('does not turn an authorization or network failure into an empty editable plan', async () => {

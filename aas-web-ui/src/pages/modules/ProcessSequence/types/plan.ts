@@ -104,6 +104,8 @@ export const planSchema = z.object({
     material: sourceSchema.extend({ globalAssetId: z.string() }).nullable(),
     /** This occurrence uses the root sequence owned by another product/assembly AAS. */
     planAasId: z.string().min(1).optional(),
+    /** Actual persisted sequence ID; scopes themselves are only an editor projection. */
+    sequenceId: z.string().optional(),
     nodes: z.array(nodeSchema),
   })),
 })

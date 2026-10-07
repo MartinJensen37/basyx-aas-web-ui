@@ -65,7 +65,7 @@ The `seed-process-plan` service creates missing demo objects, adds capability re
 the known demo inputs' semantic IDs while preserving edited parameter values, custom elements and
 the stored plan. Its normal state after success is **Exited (0)**. The main services remain running.
 Older combined demo plans are migrated into shared assembly definitions. The original attachment is
-retained as `BeforeSharedAssemblies` on the robot's plan submodel. Existing nonempty assembly plans
+retained as `BeforeReferencedSequences` on the robot's plan submodel. Existing nonempty assembly plans
 remain authoritative, and repeated seeding preserves their edits. See
 [the sequence ownership contract](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/README.md).
 
@@ -104,7 +104,7 @@ Each recipe has its own container, quantities, liquid/material references, diame
 
 Six station AASs provide format-specific capabilities and linked skills: loading, filling, stoppering, capping, inspection and unloading. Capability properties include container type, grasp diameter, fill volume, absolute fill error, stopper/cap diameter and inspection method. Select a Filling node and expand its filling-station comparison to see the required and offered values.
 
-The normal AAS viewer exposes **ProductionSequence > Scopes > Scope > Steps** as collections and properties. Save draft writes this structure, including references to process inputs, required capabilities and station skills. The [AAS template](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/ProductionSequence.json) and [contract](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/README.md) document it.
+The normal AAS viewer exposes **ProductionSequence > Steps** as collections and properties. Each assembly stores only its own steps. Calls reference the next sequence submodel directly; local subprocesses appear as separate **ProductionSubprocess** submodels. Process inputs inherit their Process Parameters definitions, with only edited values saved under **ParameterOverrides**. Required capabilities and station skills remain references. Save draft writes this structure. The [AAS template](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/ProductionSequence.json) and [contract](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/README.md) document it.
 
 Seeding creates missing pharma objects and preserves existing objects and edits. The original robot parallel example remains available. Legacy robot JSON plans are converted to structured AAS elements without discarding the original attachment.
 

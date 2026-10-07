@@ -1,7 +1,9 @@
 import type { PlanProcess, PlanScope, ProcessPlan, StepNode } from '../types/plan.ts'
 import { Buffer } from 'node:buffer'
+import { readPlanProcesses } from '../utils/planSources.ts'
 import { extractAssembly } from '../utils/planTree.ts'
-import { buildSequenceSubmodel, readSequenceSubmodel, SEQUENCE_SEMANTIC_ID } from '../utils/sequenceModel.ts'
+import { buildSequenceDocuments, canonical, DOCUMENT_SEMANTIC_ID, processReferences, readSequenceDocuments, referenceId, semanticOf } from '../utils/sequenceDocuments.ts'
+import { field, readSequenceSubmodel, SEQUENCE_SEMANTIC_ID, value } from '../utils/sequenceModel.ts'
 import { buildPharmaDemo } from './pharma.ts'
 
 const base = 'https://smartproductionlab.aau.dk'
@@ -220,13 +222,10 @@ export function buildDemo (): { shells: JsonModel[], submodels: JsonModel[], pla
   const plan: ProcessPlan = { schema: 'process-sequence-plan/2.0', productAasId: productId, revision: 1, rootScopeId: 'product', scopes }
   const plans = splitDemoPlan(plan)
   for (const definition of plans) {
-    submodels.push({
-      modelType: 'Submodel', id: `${base}/sm/process-plan/${encode(definition.productAasId)}`, idShort: 'ProcessSequencePlan',
-      semanticId: semantic(`${base}/SubmodelTemplate/ProcessSequence/2/0`), submodelElements: [
-        { modelType: 'File', idShort: 'Definition', contentType: 'application/json', value: '' },
-        { modelType: 'ReferenceElement', idShort: 'Product', value: reference('AssetAdministrationShell', definition.productAasId) },
-      ],
-    })
+    const documents = buildSequenceDocuments(definition, `${base}/sm/process-plan/${encode(definition.productAasId)}`, [...processes.values()])
+    submodels.push(...documents as JsonModel[])
+    const shell = shells.find(shell => shell.id === definition.productAasId)!
+    shell.submodels = [...shell.submodels as unknown[], ...documents.slice(1).map(document => reference('Submodel', document.id))]
   }
   return { shells, submodels, plan, plans }
 }
@@ -287,9 +286,9 @@ export async function seedDemo (repository: string): Promise<void> {
     if (existing.ok) {
       const current = await existing.json() as Record<string, any>
       if (collection === 'submodels' && model.idShort === 'ProcessParameters') {
-        const before = JSON.stringify(current)
+        const before = canonical(current)
         upgradeDemoInputs(current, model)
-        if (JSON.stringify(current) !== before) {
+        if (canonical(current) !== before) {
           const updated = await fetch(`${target}/${collection}/${encode(model.id)}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(current),
           })
@@ -302,6 +301,13 @@ export async function seedDemo (repository: string): Promise<void> {
       if (collection === 'shells') {
         for (const ref of model.submodels as { keys: { value: string }[] }[]) {
           if (!(current.submodels ?? []).some((item: { keys: { value: string }[] }) => item.keys[0]?.value === ref.keys[0].value)) {
+            const source = await fetch(`${target}/submodels/${encode(ref.keys[0].value)}`)
+            if (source.status === 404) {
+              continue
+            }
+            if (!source.ok) {
+              throw new Error(`Checking demo reference: HTTP ${source.status}`)
+            }
             const attached = await fetch(`${target}/shells/${encode(model.id)}/submodel-refs`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ref),
             })
@@ -324,19 +330,89 @@ export async function seedDemo (repository: string): Promise<void> {
     }
     console.log(`Created ${model.idShort}`)
   }
+  const existingOwners = new Set<string>()
+  for (const model of submodels.filter(model => semanticOf(model) === DOCUMENT_SEMANTIC_ID && value(model, 'Role') === 'Primary')) {
+    const response = await fetch(`${target}/submodels/${encode(model.id)}`)
+    if (response.ok) {
+      existingOwners.add(referenceId(field(model, 'Subject')))
+    } else if (response.status !== 404) {
+      throw new Error(`Checking demo sequence: HTTP ${response.status}`)
+    }
+  }
   for (const submodel of submodels) {
+    if (value(submodel, 'Role') === 'Subprocess' && existingOwners.has(referenceId(field(submodel, 'Subject')))) {
+      continue
+    }
     await ensure('submodels', submodel)
   }
   for (const shell of shells) {
     await ensure('shells', shell)
   }
   const pathFor = (id: string) => `${target}/submodels/${encode(`${base}/sm/process-plan/${encode(id)}`)}/submodel-elements/Definition`
+  async function fetchSubmodel (id: string): Promise<Record<string, any>> {
+    const response = await fetch(`${target}/submodels/${encode(id)}`)
+    if (!response.ok) {
+      throw new Error(`Reading ${id}: HTTP ${response.status}`)
+    }
+    return response.json() as Promise<Record<string, any>>
+  }
+  async function storeSequence (plan: ProcessPlan): Promise<void> {
+    const primaryId = `${base}/sm/process-plan/${encode(plan.productAasId)}`
+    const original = await fetchSubmodel(primaryId)
+    const sources = new Map<string, Record<string, any>>()
+    const processes: PlanProcess[] = []
+    for (const source of processReferences(plan)) {
+      if (!sources.has(source.submodelId)) {
+        sources.set(source.submodelId, await fetchSubmodel(source.submodelId))
+      }
+      processes.push(...readPlanProcesses(sources.get(source.submodelId)!, source.aasId))
+    }
+    const documents = buildSequenceDocuments(plan, primaryId, processes)
+    // Check source and owner content again before the migration writes anything.
+    for (const [id, model] of [[primaryId, original], ...sources] as [string, Record<string, any>][]) {
+      if (canonical(await fetchSubmodel(id)) !== canonical(model)) {
+        throw new Error('Demo data changed during migration; reload and retry.')
+      }
+    }
+    for (const document of documents.toReversed()) {
+      if (document.id === primaryId) {
+        // Retain backup attachments, not the obsolete embedded scopes or process snapshots.
+        document.submodelElements.push(...original.submodelElements.filter((element: Record<string, any>) => element.modelType === 'File'))
+      }
+      const endpoint = `${target}/submodels/${encode(document.id)}`
+      const existing = await fetch(endpoint)
+      if (!existing.ok && existing.status !== 404) {
+        throw new Error(`Checking sequence: HTTP ${existing.status}`)
+      }
+      if (existing.ok && document.id !== primaryId && canonical(await existing.json()) !== canonical(document)) {
+        throw new Error('A subprocess already exists with different content. Preserve and reconcile it before migration.')
+      }
+      const saved = await fetch(existing.ok ? endpoint : `${target}/submodels`, { method: existing.ok ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(document) })
+      if (!saved.ok) {
+        throw new Error(`Saving sequence: HTTP ${saved.status} ${await saved.text()}`)
+      }
+      const shell = await fetch(`${target}/shells/${encode(plan.productAasId)}`)
+      if (!shell.ok) {
+        throw new Error(`Reading sequence owner: HTTP ${shell.status}`)
+      }
+      const refs = (await shell.json() as Record<string, any>).submodels ?? []
+      if (!refs.some((ref: Record<string, any>) => ref.keys?.[0]?.value === document.id)) {
+        const attached = await fetch(`${target}/shells/${encode(plan.productAasId)}/submodel-refs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reference('Submodel', document.id)) })
+        if (!attached.ok) {
+          throw new Error(`Attaching sequence: HTTP ${attached.status}`)
+        }
+      }
+    }
+  }
   async function readPlan (id: string): Promise<ProcessPlan | null> {
     const modelResponse = await fetch(pathFor(id).replace('/submodel-elements/Definition', ''))
     if (!modelResponse.ok) {
       throw new Error(`Reading sequence: HTTP ${modelResponse.status}`)
     }
     const model = await modelResponse.json() as Record<string, any>
+    if (semanticOf(model) === DOCUMENT_SEMANTIC_ID) {
+      return readSequenceDocuments(model, fetchSubmodel)
+    }
     if (model.semanticId?.keys?.[0]?.value === SEQUENCE_SEMANTIC_ID) {
       return readSequenceSubmodel(model)
     }
@@ -370,19 +446,19 @@ export async function seedDemo (repository: string): Promise<void> {
   }
   async function backupPlan (plan: ProcessPlan): Promise<void> {
     const endpoint = pathFor(plan.productAasId).replace(/\/Definition$/, '')
-    const backup = await fetch(`${endpoint}/BeforeSharedAssemblies`)
+    const backup = await fetch(`${endpoint}/BeforeReferencedSequences`)
     if (backup.status === 404) {
       const created = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        modelType: 'File', idShort: 'BeforeSharedAssemblies', contentType: 'application/json', value: '',
+        modelType: 'File', idShort: 'BeforeReferencedSequences', contentType: 'application/json', value: '',
       }) })
       if (!created.ok) {
         throw new Error(`Creating migration backup: HTTP ${created.status}`)
       }
-      await upload(`${endpoint}/BeforeSharedAssemblies`, plan)
+      await upload(`${endpoint}/BeforeReferencedSequences`, plan)
     } else if (!backup.ok) {
       throw new Error(`Checking migration backup: HTTP ${backup.status}`)
     } else if (!(await backup.json() as { value?: string }).value) {
-      await upload(`${endpoint}/BeforeSharedAssemblies`, plan)
+      await upload(`${endpoint}/BeforeReferencedSequences`, plan)
     }
   }
   if (migrating) {
@@ -392,7 +468,7 @@ export async function seedDemo (repository: string): Promise<void> {
     const current = await readPlan(candidate.productAasId)
     const fillEmptyAssembly = migrating && current && current.scopes.every(scope => scope.nodes.length === 0)
       && candidate.scopes.some(scope => scope.nodes.length > 0)
-    if (current && !(migrating && candidate.productAasId === productId) && !fillEmptyAssembly) {
+    if (current && !(migrating && (candidate.productAasId === productId || !existingOwners.has(candidate.productAasId))) && !fillEmptyAssembly) {
       console.log(`Kept existing plan for ${candidate.productAasId}`)
       continue
     }
@@ -406,32 +482,22 @@ export async function seedDemo (repository: string): Promise<void> {
       }
       candidate.revision = current.revision + 1
     }
-    await upload(pathFor(candidate.productAasId), candidate)
+    await storeSequence(candidate)
     console.log(`Stored shared plan for ${candidate.productAasId}`)
   }
-  // Convert existing plans without replacing edited content; retain legacy attachments as backups.
-  for (const owner of plans.map(plan => plan.productAasId)) {
-    const endpoint = pathFor(owner).replace('/submodel-elements/Definition', '')
-    const response = await fetch(endpoint)
-    if (!response.ok) {
-      throw new Error(`Reading sequence container: HTTP ${response.status}`)
-    }
-    const original = await response.json() as Record<string, any>
-    if (original.semanticId?.keys?.[0]?.value === SEQUENCE_SEMANTIC_ID) {
+  // Migrate every demo product, preserving edited recipes and legacy attachments.
+  const owners = [...new Set([...plans.map(plan => plan.productAasId), ...pharma.plans.map(plan => plan.productAasId)])]
+  for (const owner of owners) {
+    const model = await fetchSubmodel(`${base}/sm/process-plan/${encode(owner)}`)
+    if (semanticOf(model) === DOCUMENT_SEMANTIC_ID) {
       continue
     }
     const current = await readPlan(owner)
-    if (!current) {
-      continue
+    if (current) {
+      await backupPlan(current)
+      await storeSequence(current)
+      console.log(`Converted to referenced sequences for ${owner}`)
     }
-    const structured = buildSequenceSubmodel(current, original.id)
-    const owned = new Set(structured.submodelElements.map((element: { idShort: string }) => element.idShort))
-    structured.submodelElements.push(...original.submodelElements.filter((element: { idShort: string }) => !owned.has(element.idShort)))
-    const updated = await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(structured) })
-    if (!updated.ok) {
-      throw new Error(`Converting sequence: HTTP ${updated.status}`)
-    }
-    console.log(`Converted sequence to AAS elements for ${owner}`)
   }
   const browserRepository = process.env.PS_BROWSER_REPO_URL || 'http://localhost:8081'
   console.log(`Open http://localhost:3000/modules/processsequence?aas=${encodeURIComponent(`${browserRepository}/shells/${encode(productId)}`)}`)

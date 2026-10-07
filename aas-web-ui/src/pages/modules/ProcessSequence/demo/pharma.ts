@@ -1,5 +1,7 @@
 import type { PlanNode, PlanProcess, ProcessPlan, StepNode } from '../types/plan.ts'
-import { buildSequenceSubmodel, modelRef } from '../utils/sequenceModel.ts'
+import { readPlanProcesses } from '../utils/planSources.ts'
+import { buildSequenceDocuments } from '../utils/sequenceDocuments.ts'
+import { modelRef } from '../utils/sequenceModel.ts'
 
 export const PHARMA_BASE = 'https://smartproductionlab.aau.dk/demo/pharma'
 const sem = (value: string) => ({ type: 'ExternalReference', keys: [{ type: 'GlobalReference', value }] })
@@ -63,7 +65,7 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
   }
   function savePlan (plan: ProcessPlan): void {
     plans.push(plan)
-    submodels.push(buildSequenceSubmodel(plan, planId(plan.productAasId)))
+    submodels.push(...buildSequenceDocuments(plan, planId(plan.productAasId), submodels.flatMap(model => readPlanProcesses(model, plan.productAasId)), planId))
   }
   function emptyPart (owner: string, name: string, specifications: Limit[]): void {
     if (shells.some(shell => shell.id === aas(owner))) {

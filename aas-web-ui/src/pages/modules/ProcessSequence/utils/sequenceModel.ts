@@ -6,34 +6,34 @@ import { parseScalar } from './conditions.ts'
 export const SEQUENCE_SEMANTIC_ID = 'https://smartproductionlab.aau.dk/SubmodelTemplate/ProductionSequence/1/0'
 export const sequenceSemantic = (name: string) => `https://smartproductionlab.aau.dk/ProductionSequence/${name}/1/0`
 export type AasElement = Record<string, any>
-const sem = (value: string) => ({ type: 'ExternalReference', keys: [{ type: 'GlobalReference', value }] })
+export const sem = (value: string) => ({ type: 'ExternalReference', keys: [{ type: 'GlobalReference', value }] })
 export const modelRef = (keys: { type: string, value: string }[]): CapabilityReference => ({ type: 'ModelReference', keys })
-const prop = (idShort: string, value: string | number, valueType = 'xs:string'): AasElement => ({ modelType: 'Property', idShort, semanticId: sem(sequenceSemantic(idShort)), valueType, value: String(value) })
-const collection = (idShort: string, value: AasElement[], meaning = idShort): AasElement => ({ modelType: 'SubmodelElementCollection', idShort, semanticId: sem(sequenceSemantic(meaning)), value })
-const ref = (idShort: string, value: CapabilityReference, meaning = idShort): AasElement => ({ modelType: 'ReferenceElement', idShort, semanticId: sem(sequenceSemantic(meaning)), value })
-const indexed = (prefix: string, index: number) => `${prefix}_${String(index).padStart(4, '0')}`
-function members (element: AasElement): AasElement[] {
+export const prop = (idShort: string, value: string | number, valueType = 'xs:string'): AasElement => ({ modelType: 'Property', idShort, semanticId: sem(sequenceSemantic(idShort)), valueType, value: String(value) })
+export const collection = (idShort: string, value: AasElement[], meaning = idShort): AasElement => ({ modelType: 'SubmodelElementCollection', idShort, semanticId: sem(sequenceSemantic(meaning)), value })
+export const ref = (idShort: string, value: CapabilityReference, meaning = idShort): AasElement => ({ modelType: 'ReferenceElement', idShort, semanticId: sem(sequenceSemantic(meaning)), value })
+export const indexed = (prefix: string, index: number) => `${prefix}_${String(index).padStart(4, '0')}`
+export function members (element: AasElement): AasElement[] {
   const items = element.submodelElements ?? element.value
   return Array.isArray(items) ? items : []
 }
-const field = (element: AasElement, name: string): AasElement | undefined => members(element).find(child => child.semanticId?.keys?.[0]?.value === sequenceSemantic(name))
-const value = (element: AasElement, name: string): string => String(field(element, name)?.value ?? '')
-const children = (element: AasElement, name: string): AasElement[] => members(field(element, name) ?? { value: [] })
-const ordered = (elements: AasElement[]): AasElement[] => elements.toSorted((a, b) => Number(value(a, 'Order')) - Number(value(b, 'Order')))
+export const field = (element: AasElement, name: string): AasElement | undefined => members(element).find(child => child.semanticId?.keys?.[0]?.value === sequenceSemantic(name))
+export const value = (element: AasElement, name: string): string => String(field(element, name)?.value ?? '')
+export const children = (element: AasElement, name: string): AasElement[] => members(field(element, name) ?? { value: [] })
+export const ordered = (elements: AasElement[]): AasElement[] => elements.toSorted((a, b) => Number(value(a, 'Order')) - Number(value(b, 'Order')))
 
-function sourceElements (source: SourceReference): AasElement[] {
+export function sourceElements (source: SourceReference): AasElement[] {
   return [
     ref('SourceAas', modelRef([{ type: 'AssetAdministrationShell', value: source.aasId }])),
     ref('SourceElement', modelRef([{ type: 'Submodel', value: source.submodelId }, ...source.path.map(value => ({ type: 'SubmodelElement', value }))])),
   ]
 }
 
-function sourceFrom (element: AasElement): SourceReference {
+export function sourceFrom (element: AasElement): SourceReference {
   const keys = field(element, 'SourceElement')?.value?.keys ?? []
   return { aasId: field(element, 'SourceAas')?.value?.keys?.[0]?.value ?? '', submodelId: keys[0]?.value ?? '', path: keys.slice(1).map((key: { value: string }) => key.value) }
 }
 
-function processElements (process: PlanProcess): AasElement[] {
+export function processElements (process: PlanProcess): AasElement[] {
   return [prop('ProcessId', process.processId), prop('Name', process.name), ...sourceElements(process.source),
     collection('Parameters', process.parameters.map((parameter, index) => collection(indexed('Parameter', index), [
       prop('Name', parameter.name), prop('Group', parameter.group), prop('DataType', parameter.dataType), prop('Value', parameter.value),
@@ -44,13 +44,13 @@ function processElements (process: PlanProcess): AasElement[] {
   ]
 }
 
-function requirements (items: NonNullable<PlanProcess['requiredCapabilities']>): AasElement {
+export function requirements (items: NonNullable<PlanProcess['requiredCapabilities']>): AasElement {
   return collection('RequiredCapabilities', items.map((item, index) => ({
     ...ref(indexed('RequiredCapability', index), item.reference, 'RequiredCapability'), displayName: [{ language: 'en', text: item.name }],
   })))
 }
 
-function readRequirements (element: AasElement) {
+export function readRequirements (element: AasElement) {
   return field(element, 'RequiredCapabilities')
     ? children(element, 'RequiredCapabilities').map(item => ({
         name: item.displayName?.find((name: { language: string }) => name.language === 'en')?.text ?? item.idShort, reference: item.value as CapabilityReference,
@@ -108,64 +108,69 @@ function readCondition (element: AasElement): PlanCondition {
   })
 }
 
+export function buildNodes (items: PlanNode[], scopeRef: (id: string) => CapabilityReference, operation?: (node: Extract<PlanNode, { kind: 'step' }>) => AasElement[], call?: (node: Extract<PlanNode, { kind: 'call' }>) => AasElement[]): AasElement {
+  const nodes = (items: PlanNode[]) => buildNodes(items, scopeRef, operation, call)
+  return collection('Steps', items.map((node, index) => {
+    const common = [prop('NodeId', node.id), prop('Kind', node.kind), prop('Name', node.name), prop('Order', index, 'xs:nonNegativeInteger')]
+    switch (node.kind) {
+      case 'conditional': {
+        common.push(conditionElement(node.condition), nodes(node.nodes))
+
+        break
+      }
+      case 'call': {
+        common.push(...(call ? call(node) : [ref('CalledScope', scopeRef(node.scopeId))]))
+
+        break
+      }
+      case 'decision':
+      case 'parallel': {
+        if (node.kind === 'decision') {
+          common.push(conditionElement(node.condition))
+        }
+        common.push(collection('Branches', node.branches.map((branch, index) => collection(indexed('Branch', index), [
+          prop('BranchId', branch.id), prop('Name', branch.name), prop('Order', index, 'xs:nonNegativeInteger'), nodes(branch.nodes),
+        ], 'Branch'))))
+
+        break
+      }
+      default: {
+        if (node.outputs !== undefined) {
+          common.push(collection('Outputs', node.outputs.map((output, index) => collection(indexed('Output', index), [
+            prop('OutputId', output.id), prop('Name', output.name), prop('DataType', output.type), prop('Unit', output.unit),
+          ], 'Output'))))
+        }
+        if (operation) {
+          common.push(...operation(node))
+        } else if (node.process) {
+          common.push(collection('Process', processElements(node.process)))
+        }
+        if (node.requiredCapabilities !== undefined) {
+          common.push(requirements(node.requiredCapabilities))
+        }
+        if (node.resourceAasId) {
+          common.push(ref('Resource', modelRef([{ type: 'AssetAdministrationShell', value: node.resourceAasId }])))
+        }
+        common.push(prop('SkillId', node.skillId))
+        if (node.skillReference) {
+          common.push(ref('Skill', node.skillReference))
+        }
+        if (node.executionMode) {
+          common.push(prop('ExecutionMode', node.executionMode))
+        }
+        common.push(collection('Bindings', node.bindings.map((binding, index) => collection(indexed('Binding', index), [
+          prop('Name', binding.name), prop('Value', binding.value), ...(binding.source ? sourceElements(binding.source) : []),
+        ], 'Binding'))))
+      }
+    }
+    return collection(indexed('Step', index), common, 'Step')
+  }))
+}
+
 export function buildSequenceSubmodel (plan: ProcessPlan, id: string): AasElement {
   const scopePaths = new Map(plan.scopes.map((scope, index) => [scope.id, indexed('Scope', index)]))
   const scopeRef = (scopeId: string) => modelRef([{ type: 'Submodel', value: id }, { type: 'SubmodelElementCollection', value: 'Scopes' }, { type: 'SubmodelElementCollection', value: scopePaths.get(scopeId)! }])
-  function nodes (items: PlanNode[]): AasElement {
-    return collection('Steps', items.map((node, index) => {
-      const common = [prop('NodeId', node.id), prop('Kind', node.kind), prop('Name', node.name), prop('Order', index, 'xs:nonNegativeInteger')]
-      switch (node.kind) {
-        case 'conditional': {
-          common.push(conditionElement(node.condition), nodes(node.nodes))
-
-          break
-        }
-        case 'call': {
-          common.push(ref('CalledScope', scopeRef(node.scopeId)))
-
-          break
-        }
-        case 'decision':
-        case 'parallel': {
-          if (node.kind === 'decision') {
-            common.push(conditionElement(node.condition))
-          }
-          common.push(collection('Branches', node.branches.map((branch, index) => collection(indexed('Branch', index), [
-            prop('BranchId', branch.id), prop('Name', branch.name), prop('Order', index, 'xs:nonNegativeInteger'), nodes(branch.nodes),
-          ], 'Branch'))))
-
-          break
-        }
-        default: {
-          if (node.outputs !== undefined) {
-            common.push(collection('Outputs', node.outputs.map((output, index) => collection(indexed('Output', index), [
-              prop('OutputId', output.id), prop('Name', output.name), prop('DataType', output.type), prop('Unit', output.unit),
-            ], 'Output'))))
-          }
-          if (node.process) {
-            common.push(collection('Process', processElements(node.process)))
-          }
-          if (node.requiredCapabilities !== undefined) {
-            common.push(requirements(node.requiredCapabilities))
-          }
-          if (node.resourceAasId) {
-            common.push(ref('Resource', modelRef([{ type: 'AssetAdministrationShell', value: node.resourceAasId }])))
-          }
-          common.push(prop('SkillId', node.skillId))
-          if (node.skillReference) {
-            common.push(ref('Skill', node.skillReference))
-          }
-          if (node.executionMode) {
-            common.push(prop('ExecutionMode', node.executionMode))
-          }
-          common.push(collection('Bindings', node.bindings.map((binding, index) => collection(indexed('Binding', index), [
-            prop('Name', binding.name), prop('Value', binding.value), ...(binding.source ? sourceElements(binding.source) : []),
-          ], 'Binding'))))
-        }
-      }
-      return collection(indexed('Step', index), common, 'Step')
-    }))
-  }
+  const nodes = (items: PlanNode[]) => buildNodes(items, scopeRef)
   return {
     modelType: 'Submodel', id, idShort: 'ProductionSequence', kind: 'Instance', semanticId: sem(SEQUENCE_SEMANTIC_ID),
     submodelElements: [prop('PlanSchema', plan.schema), prop('Revision', plan.revision, 'xs:nonNegativeInteger'),

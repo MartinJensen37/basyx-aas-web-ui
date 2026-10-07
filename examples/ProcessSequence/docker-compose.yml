@@ -91,12 +91,15 @@ services:
       - aas-environment
 
   seed-process-plan:
-    image: node:24-slim
+    image: basyx-aas-web-ui:processsequence-dev
+    build:
+      context: ../../aas-web-ui
+      dockerfile: ../examples/ProcessSequence/Dockerfile.dev
     environment:
       PS_REPO_URL: http://aas-environment:8081
     volumes:
-      - ../../aas-web-ui/src/pages/modules/ProcessSequence:/module:ro
-    command: ["node", "/module/demo/seed.ts"]
+      - ../../aas-web-ui/src/pages/modules/ProcessSequence:/app/src/pages/modules/ProcessSequence:ro
+    command: ["pnpm", "exec", "node", "src/pages/modules/ProcessSequence/demo/seed.ts"]
     depends_on:
       aas-environment:
         condition: service_healthy

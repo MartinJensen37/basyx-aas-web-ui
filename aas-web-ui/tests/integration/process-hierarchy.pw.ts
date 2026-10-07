@@ -1,8 +1,8 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
-import { readSequenceSubmodel } from '../../src/pages/modules/ProcessSequence/utils/sequenceModel'
 import { normalizeBasePath, toBaseScopedPath } from './basePath'
+import { cleanSequenceDocuments, readStoredSequence } from './processSequence'
 
 const repository = process.env.PS_REPO_URL
 const prefix = `urn:shared-plan:test:${Date.now()}`
@@ -75,6 +75,7 @@ test.afterAll(async ({ request }) => {
   if (!repository) {
     return
   }
+  await cleanSequenceDocuments(request, repository, [robot, drive])
   for (const id of [robot, drive]) {
     await request.delete(`${repository}/shells/${encode(id)}`)
     for (const sm of [planId(id), `${id}:inputs`, `${id}:bom`]) {
@@ -127,9 +128,11 @@ test('edits one assembly definition directly and through a parent, including a n
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
 
-  const storedChild = readSequenceSubmodel(await (await request.get(`${repository}/submodels/${encode(planId(drive))}`)).json())
+  const storedChild = (await readStoredSequence(await (await request.get(`${repository}/submodels/${encode(planId(drive))}`)).json(), request, repository!))
   expect(storedChild.scopes.some((scope: { name: string }) => scope.name === 'Shared diagnostics')).toBe(true)
-  const storedParent = await (await request.get(attachment(robot))).json()
+  const parentModel = await (await request.get(`${repository}/submodels/${encode(planId(robot))}`)).json()
+  expect(parentModel.submodelElements.some((element: { idShort: string }) => element.idShort === 'Scopes')).toBe(false)
+  const storedParent = await readStoredSequence(parentModel, request, repository!)
   expect(storedParent.scopes).toHaveLength(2)
   expect(storedParent.scopes[1].nodes).toEqual([])
   expect(storedParent.scopes[1].planAasId).toBe(drive)

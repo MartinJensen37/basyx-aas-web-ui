@@ -1,63 +1,73 @@
-# Application Production Sequence 1.0
+# Application Production Sequence 2.0
 
-Semantic ID: `https://smartproductionlab.aau.dk/SubmodelTemplate/ProductionSequence/1/0`.
+Semantic ID: `https://smartproductionlab.aau.dk/SubmodelTemplate/ProductionSequence/2/0`.
+Wire PlanSchema: `production-sequence/2.0`.
 
-Element semantic IDs use `https://smartproductionlab.aau.dk/ProductionSequence/{Name}/1/0`. This is a project-owned authoring contract, not an IDTA publication. [ProductionSequence.json](ProductionSequence.json) is an AAS `kind=Template` example with cardinality qualifiers and all five node shapes. Concrete example values illustrate the fields. Generate it with `pnpm exec node src/pages/modules/ProcessSequence/templates/generate.ts` from the application directory.
+This is a project-owned authoring contract, not an IDTA publication. Element semantic IDs use `https://smartproductionlab.aau.dk/ProductionSequence/{Name}/1/0`; unchanged element meanings retain their identifiers. [ProductionSequence.json](ProductionSequence.json) and [ProductionSubprocess.json](ProductionSubprocess.json) are AAS `kind=Template` examples with cardinality qualifiers. Generate both with `pnpm exec node src/pages/modules/ProcessSequence/templates/generate.ts`.
+
+## Ownership and references
+
+Each product, assembly or part owns one primary sequence. It stores its own steps and references only its immediate dependencies. The Hierarchical Structures submodel owns the physical product tree; Production Sequence does not repeat it. A part without work has an empty Steps collection.
+
+A subprocess authored within the same product is a separate sequence submodel attached to that product's AAS. A Subprocesses collection catalogs direct local child definitions, including unfinished subprocesses that have not yet been called. A call points directly to its target submodel using SequenceReference. Multiple calls reuse one definition. Product-component calls target that component's sequence; the component's children are resolved recursively. Opening the component on its own edits the same definition shown from a parent product.
+
+```text
+Robot sequence:      parallel { call Drive sequence; call Control sequence }
+                    -> Final assembly -> Functional test
+Drive sequence:     Prepare housing -> Install motor -> call Drive inspection
+Drive inspection:   Inspect drive
+Control sequence:   Mount board -> Test electronics
+```
+
+There are no persisted Scopes, ParentScope or RootScope fields. The editor still uses an in-memory scope tree to compose the BoM, locally authored subprocesses and referenced assembly plans. It never writes that expanded tree back into the parent submodel.
 
 ## Structure and cardinalities
 
-| Location | Required structure |
+| Location | Fields |
 | --- | --- |
-| Root | PlanSchema string, Revision nonnegative integer, Product AAS reference, RootScope local reference, Scopes collection |
-| Scopes | One or more Scope collections, including exactly one root |
-| Scope | ScopeId and Name strings; Steps collection; optional ParentScope, Material and SharedPlanOwner |
-| Material | SourceAas reference, SourceElement reference to a BoM occurrence, GlobalAssetId string |
-| Steps | Zero or more Step collections; each has NodeId, Kind, Name and unique nonnegative Order |
-| Step, Kind=step | Optional Process, RequiredCapabilities, Resource, Skill, ExecutionMode; SkillId string and Bindings collection |
-| Step, Kind=call | CalledScope reference to a local scope; no operation or branch fields |
-| Step, Kind=conditional | Condition collection and recursive Steps; no operation, call or parallel branch fields |
-| Condition | ConditionType=`everyNthProduct`, EveryNProducts positive safe integer, CounterScope=`productionRun` |
-| Step, Kind=parallel | Branches containing at least two Branch collections; no operation or call fields |
-| Step, Kind=decision (5.0) | Condition and exactly two Branches, ordered Yes then No; no operation or call fields |
-| Branch | BranchId, Name, unique Order and recursive Steps collection |
-| Process snapshot | ProcessId, Name, SourceAas, SourceElement, Parameters, Materials; optional RequiredCapabilities |
-| Parameter | Name, Group, DataType, Value, SourceAas, SourceElement |
-| Parameter (5.0 addition) | Optional Unit string from the source's IEC 61360 data specification |
+| Root | PlanSchema, Revision (nonnegative integer), SequenceId, Name, Role (`Primary` or `Subprocess`), Subject (owner AAS reference), Steps |
+| Root, optional | Component occurrence and Subprocesses (direct local child sequence references) |
+| Steps | Zero or more Step collections with NodeId, Kind, Name and unique nonnegative Order |
+| Operation (`step`) | Optional paired ProcessOwner/ProcessReference; optional ParameterOverrides, MaterialOverrides, RequiredCapabilities, Resource, Skill, ExecutionMode, Outputs; SkillId and Bindings |
+| Call (`call`) | SequenceReference (Submodel reference); optional OccurrenceId and Component for an external component occurrence |
+| Optional (`conditional`) | Condition and nested Steps |
+| Parallel (`parallel`) | At least two ordered Branch collections, each with BranchId, Name, Order and Steps |
+| Decision (`decision`) | Condition and exactly two branches: Order 0 Yes and Order 1 No |
+| ParameterOverride | ParameterReference, Value, DataType; optional Unit |
+| Component | SourceAas, SourceElement (BoM occurrence), GlobalAssetId |
 | RequiredCapabilities | Zero or more RequiredCapability references with display names |
-| Bindings | Zero or more Binding collections with Name and Value; optional paired SourceAas/SourceElement |
+| Bindings | Zero or more Binding collections with Name, Value and optional paired SourceAas/SourceElement |
 
-PlanSchema 5.0 extends the Condition and operation fields as detailed below; the periodic-only Condition row describes earlier versions.
+A new plan contains only root metadata and empty Steps. Draft operations may have no selected process. Local SequenceId values must be unique within an owner; NodeId values must be unique within a definition including branches. Sequence submodel IDs remain stable when labels change. Order determines execution order independently of collection array order. Containment, ownership and call cycles are invalid. Missing definitions and incompatible overrides are errors, not empty replacement plans.
 
-Cardinality qualifiers express local multiplicity; the conditional and graph constraints in this document are also normative. Scopes has at least one entry, even though the repeatable Scope prototype uses ZeroToMany to allow additional scopes. SourceAas/SourceElement are mandatory together in snapshots and materials, and optional together for constant bindings. ExecutionMode is `station` (default when absent) or `manual`.
+Subject and Resource reference AASs. ProcessOwner identifies the source AAS; ProcessReference identifies the full Process Parameters collection path. ParameterReference identifies the original parameter. Capability references identify IDTA Capability elements; Skill identifies an offered skill catalog entry. Binding sources identify process parameters; a null source uses the constant Value.
 
-An empty plan has its product/root references, revision zero, one root scope, and an empty Steps collection. No operation, capability or material is invented. Scopes and nodes have stable IDs independent of their AAS idShorts. Step and branch Order values determine execution order; collection array order is not an execution contract. Scope IDs are unique within a definition; node IDs are unique within a scope including its branches. Every non-root scope has an existing parent; parent and call cycles are invalid.
+## Defaults and overrides
 
-Operations execute in order. A call waits for its entire target sequence. Parallel branches all start after their predecessor and join before the following operation. This template supports structured fork/join and periodic optional flows, and typed comparisons (PlanSchema 5.0 below), but not arbitrary cycles or executable scripts. It represents an editable plan, not execution history, station availability or a pharmaceutical batch record.
+Operations resolve the current Process Parameters definition. Unchanged parameter values, names, groups, units, material requirements and capability requirements are not copied into the sequence. Only changed parameter values are persisted in ParameterOverrides. Each override includes its datatype and unit so a later incompatible source change cannot silently reinterpret it. Changed material requirements use MaterialOverrides. RequiredCapabilities absence means inherit the process requirements; a present empty collection explicitly clears inherited requirements.
 
-## References and ownership
+Parameter edits in the editor affect the sequence override, not the Process Parameters source. Reopening a plan follows updated source defaults for values without overrides. Legacy snapshot values that differ from current defaults become overrides during migration. Removed parameters and changed datatypes/units require reconciliation before migration. This is a live authoring model; it is not a frozen batch recipe or execution record.
 
-Product and Resource reference AASs. Process SourceElement references the full Process Parameters path. Material SourceElement references a BoM Entity occurrence. RequiredCapability points to the full IDTA Capability element path. Skill points to a skill catalog entry, linked from offered capabilities using IDTA CapabilityRealizedBy. Binding sources identify process parameters; a null source means the constant Value is used.
+A save compares loaded sequence documents and resolved process sources against the repository. Conflicts require reload. Dependencies are saved before their parent; failed writes retain the remaining edits for retry. These checks are optimistic, not atomic repository transactions. Other assets' sequences are checked in their own editing session. Primary sequences are discovered by semantic ID and Role; the generated ID convention is only a fallback, not the reference contract. Multiple primary candidates are rejected as ambiguous.
 
-Process snapshots retain all three parameter groups and ProcessBoM elements for inspection. Relinking a process refreshes its snapshot. Requirement absence means inherit the snapshot's requirements; a present but empty RequiredCapabilities collection is an explicit override. The template links these concerns rather than embedding a second Capability Description schema.
+## Migration
 
-SharedPlanOwner points to another product/part AAS. Its canonical submodel identifier is `https://smartproductionlab.aau.dk/sm/process-plan/{base64url(AAS-id)}`. Such a material scope stores no child steps. The editor loads that owner's root and descendants, retaining the parent's occurrence identity. A call references the local occurrence; editing the mounted content updates its owner. Saving a parent never serializes the composed child definitions into it. Ownership cycles are rejected.
-
-Revision increments on save. Legacy JSON plans are migrated on save, preserving attachments as backups; only structured AAS elements remain authoritative. The wire PlanSchema supports existing `process-sequence-plan/2.0` graphs, shared-owner `process-sequence-plan/3.0` graphs, and `process-sequence-plan/4.0` graphs with optional flows; all are serialized using this AAS template.
+The reader accepts older structured ProductionSequence 1.0 and legacy JSON Definition attachments. On save it writes local 2.0 documents and direct references, preserving authored values, stable step IDs, control flow and assignments. Existing attachment backups remain available but are no longer authoritative. The demo seeder backs up old definitions before migration and preserves edited demo recipes. Source Process Parameters, Hierarchical Structures and Capability Description schemas are unchanged.
 
 ## Matching convention
 
 See the module README for the supported capability-property comparison rules. Numeric intervals are inclusive. FillVolume is a required setpoint against an offered range. AbsoluteFillError is a required acceptable interval against the station's declared error. Units use IEC 61360 data specifications. These comparison conventions and pharma property meanings belong to the application; the IDTA capability template supplies their structure.
 
 
-## Periodic optional flow semantics (PlanSchema 4.0)
+## Periodic optional flow semantics
 
 A conditional node contains its executable body in Steps. If the one-based product ordinal modulo EveryNProducts equals zero, execute the body and wait for it to finish; otherwise skip directly to the following node. The merge is exclusive, not an all-branches parallel join. Empty bodies are valid drafts and perform no work. Removing the wrapper preserves the body's original order.
 
 CounterScope is the production run of the selected product plan. All subprocess calls and parallel branches inherit the same ordinal. The execution system owns the counter and must reuse it for retries; no mutable counter is stored in this template. A new run starts again at ordinal 1. A standalone assembly preview uses the ordinal of its own run. This rule does not mean every fifth station visit, fifth retry, or random 20-percent sampling.
 
-EveryNProducts must be an integer from 1 to 9007199254740991; 1 means every product. Unknown condition types and counter scopes are rejected. The common root and element semantic IDs remain stable; the PlanSchema value explicitly gates support for the new conditional node shape. Older editors reject 4.0 rather than silently dropping its rule. Existing 2.0/3.0 definitions are upgraded when a conditional flow is added; shared owners retain their own schema versions. Rule elements use the existing element namespace with names Condition, ConditionType, EveryNProducts and CounterScope.
+EveryNProducts must be an integer from 1 to 9007199254740991; 1 means every product. Unknown condition types and counter scopes are rejected. No mutable counter is stored in the definition.
 
-## Typed decisions and optional flows (PlanSchema 5.0)
+## Typed decisions and optional flows
 
 A decision has exactly two ordered branches: Order 0 is Yes and Order 1 is No. Branch names are labels, not executable expressions. Evaluate once, execute exactly one branch, then merge that selected path. Conditional nodes keep their existing body/skip structure. Either node can use a periodic condition or the following comparison condition:
 
@@ -65,14 +75,14 @@ A decision has exactly two ordered branches: Order 0 is Yes and Order 1 is No. B
 | --- | --- |
 | Condition | ConditionType=`comparison`, Operator, Unit, Expected; optional Operand for an unfinished draft |
 | Expected | DataType=`boolean`, `number` or `string`; Value typed `xs:boolean`, `xs:double` or `xs:string` respectively |
-| Operand, OperandType=`parameter` | StepId and the paired SourceAas/SourceElement references identifying a parameter snapshot in that operation |
+| Operand, OperandType=`parameter` | StepId and the paired SourceAas/SourceElement references identifying a effective parameter in that operation |
 | Operand, OperandType=`output` | StepId and OutputId identifying an operation output within the same scope |
 | Operation Outputs | Zero or more Output collections containing OutputId, Name, DataType and Unit |
 
 Operators are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`. Ordered comparisons require numbers. Missing or incompatible values, removed sources, invalid numbers and mismatched units remain unresolved; they never select No or Skip. Unit conversion is not implicit. Output IDs are unique within an operation, and node IDs remain unique within a scope. Semantic IDs use the existing application namespace with the field names above. Display-name changes do not change references.
 
-Operation outputs are declarations, not execution values. Preview results are scoped to each invocation and stay in browser component state. An output may be referenced after its operation, within its branch, and after an all-branches parallel join. A sibling parallel branch cannot consume it before the join. Outputs introduced inside decisions or optional flows cannot escape their selected-path merge until explicit merge mappings are implemented. Calls isolate output values; cross-subprocess mappings are not yet supported. A condition can read a parameter snapshot as a definition input independently of when that operation runs.
+Operation outputs are declarations, not execution values. Preview results are scoped to each invocation and stay in browser component state. An output may be referenced after its operation, within its branch, and after an all-branches parallel join. A sibling parallel branch cannot consume it before the join. Outputs introduced inside decisions or optional flows cannot escape their selected-path merge until explicit merge mappings are implemented. Calls isolate output values; cross-subprocess mappings are not yet supported. A condition can read a effective parameter as a definition input independently of when that operation runs.
 
-New decisions, comparison conditions, output declarations and parameter unit snapshots upgrade the owning definition to 5.0. Existing 2.0/3.0/4.0 plans retain their behavior. Composed views can require 5.0 while a stored parent only containing calls remains at an earlier version. Shared definitions are serialized independently. Unsupported future PlanSchema values and unknown condition/node types are rejected rather than silently dropped. The root semantic ID is unchanged.
+All these flow shapes are supported by `production-sequence/2.0`. Unsupported schema values and unknown condition/node types are rejected rather than silently dropped.
 
 Empty comparison operands are valid incomplete drafts. General expressions, event subscriptions, repeated execution, resource allocation, live measurements and execution history are outside this version's contract.

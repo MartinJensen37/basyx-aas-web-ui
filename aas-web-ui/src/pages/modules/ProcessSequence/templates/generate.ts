@@ -1,14 +1,17 @@
 import { writeFileSync } from 'node:fs'
 import { buildPharmaDemo } from '../demo/pharma.ts'
-import { buildSequenceSubmodel, sequenceSemantic } from '../utils/sequenceModel.ts'
+import { buildSequenceDocuments } from '../utils/sequenceDocuments.ts'
+import { sequenceSemantic } from '../utils/sequenceModel.ts'
 
-// Concrete defaults demonstrate the conditional shapes. Instances start with an empty root scope.
+// Concrete defaults demonstrate the conditional shapes. Instances start with an empty Steps collection.
 const plan = buildPharmaDemo(id => `${id}/sequence`).plans.find(plan => plan.productAasId.endsWith('/aas/vial-2ml'))!
 const filling = plan.scopes[0].nodes.find(node => node.id === 'Filling_1')!
+const baseline = filling.kind === 'step' && filling.process ? structuredClone(filling.process) : null
 plan.productAasId = 'urn:example:product'
 plan.revision = 0
 plan.schema = 'process-sequence-plan/5.0'
-if (filling.kind === 'step') {
+if (filling.kind === 'step' && filling.process) {
+  filling.process.parameters.find(parameter => parameter.name === 'FillVolume')!.value = '1.8'
   filling.outputs = [{ id: 'measured-volume', name: 'Measured volume', type: 'number', unit: 'mL' }]
 }
 plan.scopes = [
@@ -24,22 +27,23 @@ plan.scopes = [
     ] },
   ] },
   { id: 'subprocess', name: 'Subprocess', parentId: 'product', material: null, nodes: [] },
-  { ...plan.scopes[1], parentId: 'product' },
 ]
-const template = buildSequenceSubmodel(plan, 'https://smartproductionlab.aau.dk/templates/ProductionSequence/1/0')
-template.kind = 'Template'
-template.description = [{ language: 'en', text: 'Application Production Sequence 1.0. See README.md for cardinalities, conditional node shapes, ownership and matching rules. Example values are illustrative defaults, not production prescriptions.' }]
-const optional = new Set(['ParentScope', 'Material', 'SharedPlanOwner', 'Process', 'RequiredCapabilities', 'Resource', 'Skill', 'ExecutionMode', 'SourceAas', 'SourceElement', 'Outputs', 'Operand'])
-const repeatable = new Set(['Scope', 'Step', 'Branch', 'Parameter', 'Binding', 'RequiredCapability', 'Output'])
+const templates = buildSequenceDocuments(plan, 'https://smartproductionlab.aau.dk/templates/ProductionSequence/2/0', baseline ? [baseline] : [])
+const optional = new Set(['Component', 'Subprocesses', 'ParameterOverrides', 'MaterialOverrides', 'ProcessOwner', 'ProcessReference', 'SequenceReference', 'OccurrenceId', 'RequiredCapabilities', 'Resource', 'Skill', 'ExecutionMode', 'SourceAas', 'SourceElement', 'Outputs', 'Operand'])
+const repeatable = new Set(['SequenceReference', 'Step', 'Branch', 'ParameterOverride', 'Binding', 'RequiredCapability', 'Output'])
 function annotate (element: Record<string, any>, parentMeaning = ''): void {
   const name = String(element.semanticId?.keys?.[0]?.value ?? '').replace('https://smartproductionlab.aau.dk/ProductionSequence/', '').replace('/1/0', '')
-  if (element !== template && element.semanticId?.keys?.[0]?.value === sequenceSemantic(name)) {
-    const isOptional = optional.has(name) || (name === 'Unit' && parentMeaning === 'Parameter')
+  if (element.modelType !== 'Submodel' && element.semanticId?.keys?.[0]?.value === sequenceSemantic(name)) {
+    const isOptional = optional.has(name) || (name === 'Unit' && parentMeaning === 'ParameterOverride')
     element.qualifiers = [{ type: 'SMT/Cardinality', kind: 'TemplateQualifier', valueType: 'xs:string', value: repeatable.has(name) ? 'ZeroToMany' : (isOptional ? 'ZeroToOne' : 'One'), semanticId: { type: 'ExternalReference', keys: [{ type: 'GlobalReference', value: 'https://admin-shell.io/SubmodelTemplates/Cardinality/1/0' }] } }]
   }
   for (const child of element.submodelElements ?? (Array.isArray(element.value) ? element.value : [])) {
     annotate(child, name)
   }
 }
-annotate(template)
-writeFileSync(new URL('ProductionSequence.json', import.meta.url), JSON.stringify(template, null, 2) + '\n')
+for (const template of templates) {
+  template.kind = 'Template'
+  template.description = [{ language: 'en', text: 'Application Production Sequence 2.0. See README.md for cardinalities, conditional node shapes, ownership and matching rules. Example values are illustrative defaults, not production prescriptions.' }]
+  annotate(template)
+  writeFileSync(new URL(`${template.idShort}.json`, import.meta.url), JSON.stringify(template, null, 2) + '\n')
+}

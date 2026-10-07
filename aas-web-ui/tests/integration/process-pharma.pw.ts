@@ -2,8 +2,9 @@ import type { Page } from '@playwright/test'
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
 import { buildPharmaDemo, PHARMA_BASE, PHARMA_RECIPES } from '../../src/pages/modules/ProcessSequence/demo/pharma'
-import { readSequenceSubmodel, SEQUENCE_SEMANTIC_ID } from '../../src/pages/modules/ProcessSequence/utils/sequenceModel'
+import { DOCUMENT_SEMANTIC_ID as SEQUENCE_SEMANTIC_ID } from '../../src/pages/modules/ProcessSequence/utils/sequenceDocuments'
 import { normalizeBasePath, toBaseScopedPath } from './basePath'
+import { cleanSequenceDocuments, readStoredSequence } from './processSequence'
 
 const repository = process.env.PS_REPO_URL
 const prefix = `urn:pharma:test:${Date.now()}`
@@ -34,6 +35,7 @@ test.afterAll(async ({ request }) => {
   if (!repository) {
     return
   }
+  await cleanSequenceDocuments(request, repository, fixture.shells.map(shell => shell.id))
   for (const [collection, models] of [['shells', fixture.shells], ['submodels', fixture.submodels]] as const) {
     for (const model of models) {
       // A dev server can close idle pooled connections while the browser test runs.
@@ -96,7 +98,7 @@ test('changes an operation on its card and clears its old station assignment', a
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
   const endpoint = `${repository}/submodels/${encode(planId(`${prefix}/aas/cartridge-5ml`))}`
-  const stored = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  const stored = (await readStoredSequence(await (await request.get(endpoint)).json(), request, repository!))
   expect(stored.scopes[0].nodes.find(node => node.id === 'Filling_1')).toMatchObject({ process: { processId: 'Packing' }, resourceAasId: '', skillId: '', bindings: [] })
   // Restore the recipe for the subsequent full recipe review.
   await page.getByRole('combobox', { name: 'Operation type', exact: true }).focus()
@@ -150,7 +152,7 @@ test('authors typed decisions, previews both outcomes and reloads the AAS defini
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
   const endpoint = `${repository}/submodels/${encode(planId(`${prefix}/aas/syringe-1ml`))}`
-  const saved = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  const saved = (await readStoredSequence(await (await request.get(endpoint)).json(), request, repository!))
   expect(saved.schema).toBe('process-sequence-plan/5.0')
   const scope = saved.scopes.find(scope => scope.name === 'Flow checks')!
   expect(scope.nodes[0]).toMatchObject({ kind: 'step', outputs: [{ name: 'Passed', type: 'boolean' }] })
@@ -206,7 +208,7 @@ test('reviews all pharma recipes, checks station limits and reads the native AAS
     const model = await response.json()
     expect(model.semanticId.keys[0].value).toBe(SEQUENCE_SEMANTIC_ID)
     expect(model.submodelElements.some((element: { modelType: string }) => element.modelType === 'File')).toBe(false)
-    expect(readSequenceSubmodel(model).scopes[0].nodes).toHaveLength(recipe.format === 'vial' ? 8 : (recipe.volume.length === 2 ? 9 : 7))
+    expect((await readStoredSequence(model, request, repository!)).scopes[0].nodes).toHaveLength(recipe.format === 'vial' ? 8 : (recipe.volume.length === 2 ? 9 : 7))
     await expect(page.getByRole('tab', { name: /BPMN/i })).toHaveCount(0)
     await expect(page.getByText(/download.*draft.*before|recovered.*draft/i)).toHaveCount(0)
   }
@@ -242,7 +244,7 @@ test('makes inspection optional, saves its interval and previews the inspection 
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
   const endpoint = `${repository}/submodels/${encode(planId(`${prefix}/aas/vial-2ml`))}`
-  const stored = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  const stored = (await readStoredSequence(await (await request.get(endpoint)).json(), request, repository!))
   expect(stored.schema).toBe('process-sequence-plan/5.0')
   expect(stored.scopes[0].nodes.find(node => node.kind === 'conditional')).toMatchObject({ condition: { kind: 'everyNthProduct', every: 7 }, nodes: [{ name: 'Inspection', resourceAasId: `${prefix}/aas/inspection-station` }] })
   await page.getByRole('button', { name: 'Combined steps', exact: true }).click()
@@ -261,7 +263,7 @@ test('makes inspection optional, saves its interval and previews the inspection 
   await expect(page.getByRole('button', { name: 'Skip this flow', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
-  const restored = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  const restored = (await readStoredSequence(await (await request.get(endpoint)).json(), request, repository!))
   expect(restored.scopes[0].nodes.some(node => node.kind === 'conditional')).toBe(false)
   expect(restored.scopes[0].nodes.find(node => node.id === 'Inspection')).toMatchObject({ name: 'Inspection', process: { processId: 'Inspection' } })
 })
@@ -296,14 +298,14 @@ test('chooses between matching resources and persists an unassigned step', async
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
   const endpoint = `${repository}/submodels/${encode(planId(`${prefix}/aas/vial-2ml`))}`
-  const assigned = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  const assigned = (await readStoredSequence(await (await request.get(endpoint)).json(), request, repository!))
   expect(assigned.scopes[0].nodes.find(node => node.id === 'Filling_1')).toMatchObject({ resourceAasId: `${prefix}/aas/backup-filling-station` })
   await resource.fill('No resource')
   await page.getByRole('option', { name: 'No resource', exact: true }).click()
   await expect(page.getByRole('combobox', { name: 'Resource skill', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByText('Process plan saved with the product.', { exact: true })).toBeVisible()
-  const cleared = readSequenceSubmodel(await (await request.get(endpoint)).json())
+  const cleared = (await readStoredSequence(await (await request.get(endpoint)).json(), request, repository!))
   const step = cleared.scopes[0].nodes.find(node => node.id === 'Filling_1')!
   expect(step).toMatchObject({ resourceAasId: '', skillId: '', bindings: [] })
   expect(step).not.toHaveProperty('skillReference')

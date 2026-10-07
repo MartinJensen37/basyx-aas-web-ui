@@ -1,30 +1,32 @@
-import type { ProcessPlan } from '../types/plan'
+import type { PlanProcess, ProcessPlan } from '../types/plan'
+import type { AasElement } from '../utils/sequenceModel'
 import { jsonization } from '@aas-core-works/aas-core3.1-typescript'
 import { useAASRepositoryClient } from '@/composables/Client/AASRepositoryClient'
 import { useSMRepositoryClient } from '@/composables/Client/SMRepositoryClient'
 import { useRequestHandling } from '@/composables/RequestHandling'
-import { base64Encode } from '@/utils/EncodeDecodeUtils'
 import { newPlan, parsePlan } from '../utils/plan'
-import { buildSequenceSubmodel, readSequenceSubmodel, SEQUENCE_SEMANTIC_ID } from '../utils/sequenceModel'
+import { readPlanProcesses } from '../utils/planSources'
+import { buildSequenceDocuments, canonical, defaultSequenceId, DOCUMENT_SEMANTIC_ID, processReferences, readSequenceDocuments, referenceId, semanticOf } from '../utils/sequenceDocuments'
+import { field, readSequenceSubmodel, SEQUENCE_SEMANTIC_ID, value } from '../utils/sequenceModel'
 
-export function planSubmodelId (productAasId: string): string {
-  return `https://smartproductionlab.aau.dk/sm/process-plan/${base64Encode(productAasId)}`
-}
-
+export const planSubmodelId = defaultSequenceId
 export function buildPlanSubmodel (productAasId: string) {
-  return buildSequenceSubmodel(newPlan(productAasId, 'Product'), planSubmodelId(productAasId))
+  return buildSequenceDocuments(newPlan(productAasId, 'Product'), planSubmodelId(productAasId), [])[0]!
 }
 
-/** Structured AAS elements are authoritative; legacy JSON attachments are read for migration only. */
+/** Documents own their steps. Product trees and resolved process values exist only in the editor. */
 export function usePlanRepository () {
   const { getSmEndpointById, postSubmodel, putSubmodel, fetchAttachmentFile } = useSMRepositoryClient()
   const { getAasEndpointById, getSubmodelRefsById } = useAASRepositoryClient()
   const { getRequest, postRequest } = useRequestHandling()
-  const baselines = new Map<string, string | null>()
-  const models = new Map<string, Record<string, any>>()
+  const primaryIds = new Map<string, string>()
+  const baselines = new Map<string, Map<string, { owner: string, content: string | null }>>()
+  const models = new Map<string, AasElement>()
+  const migration = new Set<string>()
+  const legacyContents = new Map<string, string>()
 
-  async function read (productAasId: string): Promise<string | null> {
-    const endpoint = getSmEndpointById(planSubmodelId(productAasId), productAasId)
+  async function fetchModel (id: string, owner: string): Promise<AasElement | null> {
+    const endpoint = getSmEndpointById(id, owner)
     if (!endpoint) {
       throw new Error('No submodel repository is configured.')
     }
@@ -35,86 +37,183 @@ export function usePlanRepository () {
     if (!response.success) {
       throw new Error('The saved plan could not be read. Editing is paused to protect the saved version.')
     }
-    models.set(productAasId, response.data)
-    if (response.data?.semanticId?.keys?.[0]?.value === SEQUENCE_SEMANTIC_ID) {
-      return JSON.stringify(parsePlan(JSON.stringify(readSequenceSubmodel(response.data)), productAasId))
+    return response.data
+  }
+
+  async function discover (owner: string): Promise<string> {
+    const references = await getSubmodelRefsById(owner)
+    const candidates = references.flatMap(reference => reference.keys ?? []).filter(key => key.type === 'Submodel').map(key => String(key.value))
+    const found: string[] = []
+    for (const id of candidates) {
+      const model = await fetchModel(id, owner)
+      if (model && (semanticOf(model) === SEQUENCE_SEMANTIC_ID || semanticOf(model) === 'https://smartproductionlab.aau.dk/SubmodelTemplate/ProcessSequence/2/0' || (semanticOf(model) === DOCUMENT_SEMANTIC_ID && value(model, 'Role') === 'Primary'))) {
+        found.push(id)
+      }
     }
-    const definition = response.data?.submodelElements?.find((element: { idShort: string }) => element.idShort === 'Definition')
+    if (found.length > 1) {
+      throw new Error('This product has several primary sequences. Resolve the ambiguous primary reference before editing.')
+    }
+    return found[0] ?? planSubmodelId(owner)
+  }
+
+  async function load (owner: string, explicitId?: string): Promise<ProcessPlan | null> {
+    const id = explicitId || await discover(owner)
+    migration.delete(owner)
+    legacyContents.delete(owner)
+    primaryIds.set(owner, id)
+    const baseline = new Map<string, { owner: string, content: string | null }>()
+    baselines.set(owner, baseline)
+    async function get (id: string, aas = owner): Promise<AasElement> {
+      const model = await fetchModel(id, aas)
+      const sequence = model && [DOCUMENT_SEMANTIC_ID, SEQUENCE_SEMANTIC_ID].includes(semanticOf(model))
+      const documentOwner = sequence && (referenceId(field(model!, 'Subject')) || referenceId(field(model!, 'Product')))
+      // Another asset's sequence is checked by that asset's own repository session.
+      if (!documentOwner || documentOwner === owner) {
+        baseline.set(id, { owner: aas, content: model ? canonical(model) : null })
+      }
+      if (!model) {
+        throw new Error(`Referenced submodel ${id} is missing.`)
+      }
+      models.set(id, model)
+      return model
+    }
+    const model = await fetchModel(id, owner)
+    baseline.set(id, { owner, content: model ? canonical(model) : null })
+    if (!model) {
+      return null
+    }
+    models.set(id, model)
+    if (semanticOf(model) === DOCUMENT_SEMANTIC_ID) {
+      return parsePlan(JSON.stringify(await readSequenceDocuments(model, get)), owner)
+    }
+    migration.add(owner)
+    if (semanticOf(model) === SEQUENCE_SEMANTIC_ID) {
+      return parsePlan(JSON.stringify(readSequenceSubmodel(model)), owner)
+    }
+    const definition = model.submodelElements?.find((element: AasElement) => element.idShort === 'Definition')
     if (!definition || definition.modelType !== 'File') {
       throw new Error('The saved plan has no Definition file.')
     }
     if (!definition.value) {
       return null
     }
-    const blob = await fetchAttachmentFile(`${endpoint}/submodel-elements/Definition`, 'blob')
+    const blob = await fetchAttachmentFile(`${getSmEndpointById(id, owner)}/submodel-elements/Definition`, 'blob')
     if (!blob) {
       throw new Error('The plan attachment could not be read.')
     }
-    return blob.text()
-  }
-
-  async function load (productAasId: string): Promise<ProcessPlan | null> {
-    const content = await read(productAasId)
-    const plan = content === null ? null : parsePlan(content, productAasId)
-    baselines.set(productAasId, content)
+    // Track attachment content as well as its container when checking legacy plans.
+    const plan = parsePlan(await blob.text(), owner)
+    legacyContents.set(owner, JSON.stringify(plan))
     return plan
   }
 
+  async function check (owner: string): Promise<void> {
+    const baseline = baselines.get(owner)
+    if (!baseline) {
+      throw new Error('Load the sequence before saving.')
+    }
+    for (const [id, expected] of baseline) {
+      const model = await fetchModel(id, expected.owner)
+      if ((model ? canonical(model) : null) !== expected.content) {
+        throw new Error('The server plan or a referenced process changed in another view. Reload the latest version before saving.')
+      }
+    }
+    if (legacyContents.has(owner)) {
+      const id = primaryIds.get(owner)!
+      const blob = await fetchAttachmentFile(`${getSmEndpointById(id, owner)}/submodel-elements/Definition`, 'blob')
+      if (!blob || JSON.stringify(parsePlan(await blob.text(), owner)) !== legacyContents.get(owner)) {
+        throw new Error('The server plan changed in another view. Reload the latest version before saving.')
+      }
+    }
+  }
+
   async function save (plan: ProcessPlan): Promise<ProcessPlan> {
-    const productAasId = plan.productAasId
-    const previous = await read(productAasId)
-    if (!baselines.has(productAasId) || previous !== baselines.get(productAasId)) {
-      throw new Error('The server plan changed in another view. Reload the latest version before saving.')
+    const owner = plan.productAasId
+    const primaryId = primaryIds.get(owner)
+    const baseline = baselines.get(owner)
+    if (!primaryId || !baseline) {
+      throw new Error('Load the sequence before saving.')
     }
-    const next = parsePlan(JSON.stringify({ ...plan, revision: Math.max(plan.revision, previous ? parsePlan(previous, productAasId).revision : 0) + 1 }), productAasId)
-    const submodelId = planSubmodelId(productAasId)
-    const endpoint = getSmEndpointById(submodelId, productAasId)
-    const structured = buildSequenceSubmodel(next, submodelId)
-    // Keep legacy attachments/backup elements available without making them authoritative again.
-    const original = models.get(productAasId)
-    const owned = new Set(structured.submodelElements.map((element: { idShort: string }) => element.idShort))
-    structured.submodelElements.push(...(original?.submodelElements ?? []).filter((element: { idShort: string }) => !owned.has(element.idShort)))
-    const parsedModel = jsonization.submodelFromJsonable(structured as never)
-    if (parsedModel.error) {
-      throw new Error('The sequence could not be represented as valid AAS elements.')
+    await check(owner)
+    const processes: PlanProcess[] = []
+    for (const source of processReferences(plan)) {
+      const model = await fetchModel(source.submodelId, source.aasId)
+      if (!model) {
+        throw new Error(`The process source for ${source.submodelId} is missing.`)
+      }
+      if (!baseline.has(source.submodelId)) {
+        baseline.set(source.submodelId, { owner: source.aasId, content: canonical(model) })
+      }
+      processes.push(...readPlanProcesses(model, source.aasId))
     }
-    let created = false
-    if (previous === null) {
-      const response = await getRequest(endpoint, 'checking the plan container', true)
-      if (response.status === 404) {
-        if (!await postSubmodel(parsedModel.mustValue(), true, productAasId)) {
-          throw new Error('The process plan container could not be created.')
+    const revision = Math.max(plan.revision, Number(value(models.get(primaryId) ?? {}, 'Revision')) || 0) + 1
+    const next = parsePlan(JSON.stringify({ ...plan, revision }), owner)
+    const documents = buildSequenceDocuments(next, primaryId, processes, aas => primaryIds.get(aas) ?? planSubmodelId(aas))
+    for (const document of documents) {
+      if (!baseline.has(document.id)) {
+        const existing = await fetchModel(document.id, owner)
+        if (existing) {
+          throw new Error(`Submodel ${document.id} already exists outside this loaded plan. Reload before saving.`)
         }
-        created = true
-        baselines.set(productAasId, JSON.stringify(next))
-        models.set(productAasId, structured)
-      } else if (!response.success) {
-        throw new Error('The process plan container could not be checked.')
+        baseline.set(document.id, { owner, content: null })
       }
     }
-    const references = await getSubmodelRefsById(productAasId)
-    if (!references.some(reference => reference.keys?.some((key: { value: string }) => key.value === submodelId))) {
-      const endpoint = getAasEndpointById(productAasId)
-      const reference = { type: 'ModelReference', keys: [{ type: 'Submodel', value: submodelId }] }
-      const linked = await postRequest(`${endpoint}/submodel-refs`, JSON.stringify(reference),
-        new Headers({ 'Content-Type': 'application/json' }), 'linking the process plan', true)
-      if (!linked.success) {
-        throw new Error('The plan could not be linked to the product.')
+    await check(owner)
+    // Children are written before the primary document that exposes their references.
+    const ordered: AasElement[] = []
+    const visited = new Set<string>()
+    function order (document: AasElement): void {
+      if (visited.has(document.id)) {
+        return
+      }
+      visited.add(document.id)
+      for (const reference of field(document, 'Subprocesses')?.value ?? []) {
+        const child = documents.find(item => item.id === referenceId(reference))
+        if (child) {
+          order(child)
+        }
+      }
+      ordered.push(document)
+    }
+    for (const document of documents) {
+      order(document)
+    }
+    for (const document of ordered) {
+      const original = models.get(document.id)
+      const owned = new Set(document.submodelElements.map((element: AasElement) => element.idShort))
+      document.submodelElements.push(...(original?.submodelElements ?? []).filter((element: AasElement) => !owned.has(element.idShort)
+        && !element.semanticId?.keys?.some((key: { value: string }) => key.value.startsWith('https://smartproductionlab.aau.dk/ProductionSequence/'))))
+      const parsed = jsonization.submodelFromJsonable(document as never)
+      if (parsed.error) {
+        throw new Error('The sequence could not be represented as valid AAS elements.')
+      }
+      const existed = baseline.get(document.id)!.content !== null
+      const saved = existed ? await putSubmodel(parsed.mustValue(), true, owner) : await postSubmodel(parsed.mustValue(), true, owner)
+      if (!saved) {
+        throw new Error('The plan could not be saved. Your draft is still open; successfully written documents can be retried.')
+      }
+      baseline.set(document.id, { owner, content: canonical(jsonization.toJsonable(parsed.mustValue())) })
+      models.set(document.id, document)
+      if (document.id === primaryId) {
+        legacyContents.delete(owner)
+      }
+      const references = await getSubmodelRefsById(owner)
+      if (!references.some(reference => reference.keys?.some((key: { value: string }) => key.value === document.id))) {
+        const linked = await postRequest(`${getAasEndpointById(owner)}/submodel-refs`, JSON.stringify({ type: 'ModelReference', keys: [{ type: 'Submodel', value: document.id }] }), new Headers({ 'Content-Type': 'application/json' }), 'linking the process plan', true)
+        if (!linked.success) {
+          throw new Error('The plan could not be linked to the product.')
+        }
       }
     }
-    if (!created && !await putSubmodel(parsedModel.mustValue(), true, productAasId)) {
-      throw new Error('The plan could not be saved. Your draft is still open.')
+    migration.delete(owner)
+    for (const scope of next.scopes) {
+      const document = documents.find(document => value(document, 'SequenceId') === scope.id)
+      if (document) {
+        scope.sequenceId = document.id
+      }
     }
-    baselines.set(productAasId, JSON.stringify(next))
-    models.set(productAasId, structured)
     return next
   }
 
-  async function check (productAasId: string): Promise<void> {
-    if (!baselines.has(productAasId) || await read(productAasId) !== baselines.get(productAasId)) {
-      throw new Error('A linked assembly changed in another view. Reload the latest version before saving.')
-    }
-  }
-
-  return { load, save, check }
+  return { load, save, check, needsMigration: (owner: string) => migration.has(owner) }
 }

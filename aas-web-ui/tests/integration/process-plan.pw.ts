@@ -1,8 +1,8 @@
 import type { APIRequestContext } from '@playwright/test'
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
-import { readSequenceSubmodel } from '../../src/pages/modules/ProcessSequence/utils/sequenceModel'
 import { normalizeBasePath, toBaseScopedPath } from './basePath'
+import { cleanSequenceDocuments, readStoredSequence } from './processSequence'
 
 const repository = process.env.PS_REPO_URL
 const basePath = normalizeBasePath(process.env.IT_BASE_PATH ?? '/ui/')
@@ -104,6 +104,7 @@ test.beforeAll(async ({ request }) => {
 
 test.afterAll(async ({ request }) => {
   if (repository) {
+    await cleanSequenceDocuments(request, repository, [id, resourceId])
     await request.delete(`${repository}/shells/${encode(id)}`)
     await request.delete(`${repository}/shells/${encode(resourceId)}`)
     for (const submodel of [bomId, inputsId, skillsId, definitionId, requiredId, offeredId]) {
@@ -208,9 +209,9 @@ test('authors assembly sequences and parallel subprocesses, then reloads the ser
 
   const saved = await request.get(`${repository}/submodels/${encode(definitionId)}`)
   expect(saved.ok()).toBe(true)
-  const plan = readSequenceSubmodel(await saved.json())
+  const plan = (await readStoredSequence(await saved.json(), request, repository!))
   expect(plan.revision).toBe(1)
-  expect(plan.scopes).toHaveLength(4)
+  expect(plan.scopes).toHaveLength(3)
   const parallel = plan.scopes[0].nodes[0]
   if (parallel.kind !== 'parallel') {
     throw new Error('Missing parallel group')
