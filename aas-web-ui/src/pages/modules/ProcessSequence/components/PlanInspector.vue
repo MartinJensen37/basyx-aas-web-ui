@@ -67,7 +67,7 @@
           :summary="`${node.process?.parameters.length ?? 0} parameters`"
           title="Process inputs"
         >
-          <PlanParameters v-if="node.process" :process="node.process" :material-scopes="materialScopes" />
+          <PlanParameters v-if="node.process" :material-scopes="materialScopes" :process="node.process" />
         </InspectorSection>
 
         <PlanCapabilities v-model="node" :inherited="inheritedRequirements" :resources="resources" />

@@ -2,23 +2,27 @@
   <div class="material-node">
     <Handle v-if="data.material?.role === 'output'" id="material-target" :position="Position.Left" type="target" />
     <Handle v-else id="material-source" :position="Position.Right" type="source" />
+
     <button :aria-label="`Material ${data.title} at ${data.operationName}`" class="material-button nodrag nopan" :class="{ 'material-workpiece': data.material?.role === 'workpiece' || data.material?.role === 'linked' }" @click="showDetails">
       <span class="d-flex align-center ga-1 text-caption"><v-icon icon="mdi-package-variant-closed" size="14" />{{ data.subtitle }}</span>
       <span class="d-block text-body-small font-weight-medium text-truncate" :title="data.title">{{ data.title }}</span>
       <span class="d-block text-caption">{{ data.material ? materialAmount(data.material) : '' }}</span>
     </button>
+
     <v-dialog v-model="open" max-width="520">
       <v-card :title="data.title">
         <v-card-text v-if="data.material">
           <p class="mb-2">{{ data.subtitle }} at {{ data.operationName }}: {{ materialAmount(data.material) }}</p>
           <p v-if="data.material.role === 'workpiece'" class="text-body-small mb-3">This is the item being processed. It is not an additional component consumed at every step.</p>
           <v-alert v-if="data.material.warning" class="mb-3" density="compact" type="info">{{ data.material.warning }}</v-alert>
+
           <div v-if="data.material.reference" class="text-body-small text-break">
             <div class="font-weight-medium">BoM occurrence</div>
             <div>{{ data.material.reference.path.join(' / ') }}</div>
             <div class="text-medium-emphasis">{{ data.material.reference.submodelId }}</div>
           </div>
         </v-card-text>
+
         <v-card-actions>
           <v-btn v-if="data.material?.scopeId" color="primary" @click="openPart">Open part sequence</v-btn>
           <v-spacer />

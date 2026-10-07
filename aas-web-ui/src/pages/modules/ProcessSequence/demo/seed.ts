@@ -1,6 +1,6 @@
-import { materialSemantic, upgradeMaterialUses } from '../utils/materials.ts'
 import type { PlanProcess, PlanScope, ProcessPlan, StepNode } from '../types/plan.ts'
 import { Buffer } from 'node:buffer'
+import { materialSemantic, upgradeMaterialUses } from '../utils/materials.ts'
 import { readPlanProcesses } from '../utils/planSources.ts'
 import { extractAssembly } from '../utils/planTree.ts'
 import { buildSequenceDocuments, canonical, DOCUMENT_SEMANTIC_ID, processReferences, readSequenceDocuments, referenceId, semanticOf } from '../utils/sequenceDocuments.ts'

@@ -86,3 +86,21 @@ Operation outputs are declarations, not execution values. Preview results are sc
 All these flow shapes are supported by `production-sequence/2.0`. Unsupported schema values and unknown condition/node types are rejected rather than silently dropped.
 
 Empty comparison operands are valid incomplete drafts. General expressions, event subscriptions, repeated execution, resource allocation, live measurements and execution history are outside this version's contract.
+
+
+## Material use and diagram connections
+
+ProcessBoM remains the source of operation material requirements. Its optional application extension uses a MaterialUse collection with semantic ID `https://smartproductionlab.aau.dk/ProcessParameters/MaterialUse/1/0`. Child fields use `https://smartproductionlab.aau.dk/ProcessParameters/MaterialUse/{Field}/1/0`:
+
+| Field | Meaning |
+| --- | --- |
+| MaterialReference | ModelReference to the exact BoM Entity occurrence, including its full path |
+| Role | `workpiece`, `incorporated`, `consumable`, or `output` |
+| Quantity + Unit | Explicit quantity per operation invocation (e.g. 1 piece), never the overall BoM total |
+| QuantityParameterReference | Alternative to Quantity/Unit: reference a parameter in this process and inherit its effective value and unit, including a sequence override |
+
+Use either Quantity/Unit or QuantityParameterReference. For a reusable process in two filling cycles, each invocation resolves its own effective volume. Each stoppering cycle uses one stopper even when the overall BoM lists two. Workpiece indicates the existing item being processed; it must not be counted as a newly consumed part at each operation. Produced material is separate from measured operation Outputs.
+
+The graph derives material cards and edges at runtime. Added components and consumables point into the operation, produced materials point out, and workpieces use neutral connections without consumption arrows. Legacy plain references appear as Linked material with unspecified quantity. Names resolve from the mounted BoM occurrences, with displayName/path fallbacks. Clicking a material shows its occurrence and opens the part's sequence when available. Hide materials only changes the view.
+
+The same roles and quantities appear under Process inputs / Process materials. Sequence storage inherits ProcessBoM and only persists MaterialOverrides when requirements differ. Layout positions, resolved labels and material graph edges are never saved in the sequence. The diagram is an authoring view; it does not calculate inventory, material balances, lot traceability or implicit dependencies between branches.

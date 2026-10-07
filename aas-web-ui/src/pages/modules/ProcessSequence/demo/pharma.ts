@@ -1,5 +1,5 @@
-import { materialUse } from '../utils/materials.ts'
 import type { PlanNode, PlanProcess, ProcessPlan, StepNode } from '../types/plan.ts'
+import { materialUse } from '../utils/materials.ts'
 import { readPlanProcesses } from '../utils/planSources.ts'
 import { buildSequenceDocuments } from '../utils/sequenceDocuments.ts'
 import { modelRef } from '../utils/sequenceModel.ts'
@@ -47,7 +47,7 @@ function unitDefinition (name: string, unit?: string) {
 
 function capability (owner: string, name: string, operation: string, role: 'Required' | 'Offered', limits: Limit[]) {
   return collection(name, [
-    { modelType: 'Capability', idShort: 'Capability', displayName: [{ language: 'en', text: `${operation} â€” ${name}` }], semanticId: sem(cap('Capability')),
+    { modelType: 'Capability', idShort: 'Capability', displayName: [{ language: 'en', text: `${operation} — ${name}` }], semanticId: sem(cap('Capability')),
       supplementalSemanticIds: [sem(meaning(operation))], qualifiers: [{ type: role, kind: 'ValueQualifier', valueType: 'xs:boolean', value: 'true', semanticId: sem(cap(`CapabilityRoleQualifier/${role}`)) }] },
     collection('Properties', limits.map(limit => collection(limit.name, [{
       ...(limit.value === undefined
@@ -140,7 +140,7 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
       const operation = id.split('_', 1)[0]
       const cycle = Number(id.split('_', 2)[1] ?? 1)
       const manual = operation === 'Unpacking' || operation === 'Packing'
-      const name = recipe.volume.length > 1 && ['Filling', 'Stoppering'].includes(operation) ? `${operation} â€” dose ${cycle}` : operation
+      const name = recipe.volume.length > 1 && ['Filling', 'Stoppering'].includes(operation) ? `${operation} — dose ${cycle}` : operation
       const limits: Limit[] = [{ name: 'ContainerType', value: recipe.format }, { name: 'GraspDiameter', value: recipe.diameter, unit: 'mm' }]
       if (operation === 'Filling') {
         limits.push({ name: 'FillVolume', value: recipe.volume[cycle - 1], unit: 'mL' }, { name: 'AbsoluteFillError', min: 0, max: recipe.accuracy, unit: 'mL' })
@@ -162,7 +162,9 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
       parameters.push(...[{ name: 'Cycle', value: String(cycle), dataType: 'xs:double' }, { name: 'RecipeNote', value: 'Illustrative values; editable engineering demo', dataType: 'xs:string' }].map(parameter => ({ ...parameter, group: 'ProcessParameters' as const, source: { ...source, path: [...source.path, 'ProcessParameters', parameter.name] } })))
       const requiredCapabilities = manual ? [] : [{ name, reference: capRef(recipe.id, id) }]
       const relevant = parts.filter(part => {
-        if (part.id.endsWith('-container')) return true
+        if (part.id.endsWith('-container')) {
+          return true
+        }
         if (operation === 'Filling') {
           return part.id === `demo-liquid-${cycle}`
         }

@@ -314,3 +314,31 @@ test('chooses between matching resources and persists an unassigned step', async
   await page.getByRole('button', { name: 'Expand Resource assignment', exact: true }).click()
   await expect(resource).toHaveValue('No resource')
 })
+
+test('shows recipe materials automatically, with per-cycle quantities and part navigation', async ({ page }) => {
+  test.setTimeout(120_000)
+  await openWorkspace(page)
+  const recipe = PHARMA_RECIPES.find(recipe => recipe.volume.length === 2)!
+  const picker = page.getByRole('combobox', { name: 'Product to plan', exact: true })
+  await expect(picker).toBeEnabled({ timeout: 60_000 })
+  await picker.fill(recipe.name)
+  await page.getByRole('option', { name: recipe.name, exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Sequence name', exact: true })).toHaveValue(recipe.name)
+  const stopper = `${recipe.stopper} mm rubber stopper`
+  for (const cycle of [1, 2]) {
+    await expect(page.getByRole('button', { name: `Material ${stopper} at Stoppering \u2014 dose ${cycle}`, exact: true })).toContainText('1 piece')
+    await expect(page.getByRole('button', { name: `Material Demo liquid ${cycle} at Filling \u2014 dose ${cycle}`, exact: true })).toContainText(`${recipe.volume[cycle - 1]} mL`)
+  }
+  await expect(page.getByRole('button', { name: `Material ${recipe.name} at Packing`, exact: true })).toContainText('Produced material')
+  await expect(page.getByRole('button', { name: 'Material Packing tray at Unpacking', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Hide materials', exact: true }).click()
+  await expect(page.getByRole('button', { name: /^Material / })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Show materials', exact: true }).click()
+  await page.screenshot({ path: 'test-results/pharma-material-flow.png', fullPage: true })
+  await page.getByRole('button', { name: `Material ${stopper} at Stoppering \u2014 dose 2`, exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Product / Part_1', { exact: true })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Open part sequence', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Sequence name', exact: true })).toHaveValue(stopper)
+  await expect(page.getByRole('button', { name: /^Material / })).toHaveCount(0)
+})

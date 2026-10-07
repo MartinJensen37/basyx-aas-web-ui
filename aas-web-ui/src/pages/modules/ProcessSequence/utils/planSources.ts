@@ -96,16 +96,3 @@ export function readPlanProcesses (submodel: Element, aasId: string): PlanProces
     }
   })
 }
-
-export function materialLabels (elements: unknown[]): string[] {
-  return elements.flatMap(raw => {
-    if (!raw || typeof raw !== 'object') {
-      return []
-    }
-    const element = raw as Element
-    const children = materialLabels(element.statements ?? childrenOf(element))
-    const target = element.globalAssetId ?? element.value?.keys?.map((key: Element) => key.value).join(' / ')
-    const value = target || (typeof element.value === 'string' ? element.value : '')
-    return children.length > 0 ? children : [`${label(element)}${value ? `: ${value}` : ''}`]
-  })
-}

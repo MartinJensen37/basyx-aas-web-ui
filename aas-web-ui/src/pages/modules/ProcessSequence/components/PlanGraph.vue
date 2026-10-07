@@ -3,7 +3,14 @@
     <div class="d-flex flex-wrap align-center ga-1 px-3 pb-2">
       <v-btn prepend-icon="mdi-plus" size="small" variant="tonal" @click="add">Add step</v-btn>
       <v-spacer />
-      <v-btn :aria-pressed="showMaterials" prepend-icon="mdi-package-variant-closed" size="small" variant="text" @click="showMaterials = !showMaterials; fit()">{{ showMaterials ? 'Hide materials' : 'Show materials' }}</v-btn>
+
+      <v-btn
+        :aria-pressed="showMaterials"
+        prepend-icon="mdi-package-variant-closed"
+        size="small"
+        variant="text"
+        @click="showMaterials = !showMaterials; fit()"
+      >{{ showMaterials ? 'Hide materials' : 'Show materials' }}</v-btn>
 
       <v-btn
         aria-label="Fit graph"
@@ -41,7 +48,7 @@
       </template>
     </div>
 
-    <p v-if="graph.edges.some(edge => edge.data?.kind === 'material' || edge.data?.kind === 'result')" class="text-caption px-3 pb-2">Solid: execution order ? Dotted green: materials added or produced ? Dotted gray: workpiece or linked material ? Dashed purple: results</p>
+    <p v-if="graph.edges.some(edge => edge.data?.kind === 'material' || edge.data?.kind === 'result')" class="text-caption px-3 pb-2">Solid: execution order | Dotted green: materials added or produced | Dotted gray: workpiece or linked material | Dashed purple: results</p>
 
     <div :aria-label="label" class="plan-canvas" role="region">
       <VueFlow
@@ -91,8 +98,8 @@
   import { decisionForOutput } from '../utils/outputDecision'
   import { flattenNodes, newNode } from '../utils/plan'
   import { buildPlanGraph, findLane } from '../utils/planGraph'
-  import PlanMaterialNode from './PlanMaterialNode.vue'
   import PlanGraphNode from './PlanGraphNode.vue'
+  import PlanMaterialNode from './PlanMaterialNode.vue'
   import '@vue-flow/core/dist/style.css'
   import '@vue-flow/core/dist/theme-default.css'
   import '@vue-flow/controls/dist/style.css'
@@ -112,7 +119,7 @@
   const insertionLabel = computed(() => {
     if (selected.value) return `Insert after ${selected.value.name}`
     if (branchId.value) return `Insert at start of ${graph.value.nodes.find(node => node.data?.branchId === branchId.value)?.data?.title ?? 'branch'}`
-    return insertionId.value === 'start' ? 'Insert at sequence start' : 'Append to sequence Â· select a node or branch to insert there'
+    return insertionId.value === 'start' ? 'Insert at sequence start' : 'Append to sequence - select a node or branch to insert there'
   })
 
   function fit (): void {

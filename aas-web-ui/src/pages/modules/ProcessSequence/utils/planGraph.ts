@@ -1,9 +1,9 @@
 import type { PlanNode, PlanScope } from '../types/plan'
+import type { MaterialUse } from './materials'
 import type { Edge, Node } from '@vue-flow/core'
 import { MarkerType } from '@vue-flow/core'
-import type { MaterialUse } from './materials'
-import { materialRoles, readMaterialUses } from './materials'
 import { conditionLabel, conditionOptions } from './conditions'
+import { materialRoles, readMaterialUses } from './materials'
 import { flattenNodes } from './plan'
 
 export interface PlanGraphData {
@@ -60,7 +60,7 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
   const nodes: Node<PlanGraphData>[] = []
   const edges: Edge[] = []
   const options = conditionOptions(flattenNodes(sequence))
-  const uses = new Map(flattenNodes(sequence).filter(node => node.kind === 'step' && node.process).map(node => [node.id, showMaterials ? readMaterialUses(node.process!, scopes) : []]))
+  const uses = new Map(flattenNodes(sequence).filter(node => node.kind === 'step').map(node => [node.id, showMaterials && node.process ? readMaterialUses(node.process, scopes) : []]))
   const column = [...uses.values()].some(items => items.length > 0) ? 800 : 280
   const gap = 32
   const width = (lane: PlanNode[]): number => Math.max(1, ...lane.map(node => {
@@ -81,6 +81,25 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
       sourceHandle: 'flow-out', targetHandle: 'flow-in',
       markerEnd: MarkerType.ArrowClosed, style: { stroke: '#78909c', strokeWidth: 2 },
     })
+  }
+
+  function addMaterials (id: string, planId: string, name: string, inputs: MaterialUse[], outputs: MaterialUse[], x: number, y: number): void {
+    for (const [side, items] of [inputs, outputs].entries()) {
+      for (const [index, material] of items.entries()) {
+        const output = side === 1
+        const materialId = add(`material:${planId}:${material.id}`, x + (output ? 280 : -248) / column, y + index * 84, {
+          kind: 'material', title: material.name, subtitle: materialRoles[material.role], material, operationName: name, planId,
+        })
+        const incoming = material.role === 'incorporated' || material.role === 'consumable'
+        edges.push({
+          id: `material-edge:${planId}:${material.id}`, source: output ? id : materialId, target: output ? materialId : id,
+          sourceHandle: output ? 'material-out' : 'material-source', targetHandle: output ? 'material-target' : 'material-in', type: 'smoothstep',
+          ariaLabel: `${materialRoles[material.role]}: ${material.name} ${output ? 'from' : 'at'} ${name}`,
+          data: { kind: 'material' }, markerEnd: incoming || output ? MarkerType.ArrowClosed : undefined,
+          style: { stroke: incoming || output ? '#00897b' : '#78909c', strokeWidth: 2, strokeDasharray: '3 5' },
+        })
+      }
+    }
   }
 
   function layout (lane: PlanNode[], x: number, y: number, incoming: string): { last: string, y: number } {
@@ -115,22 +134,7 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
         subtitle,
       })
       connect(last, id)
-      for (const [side, items] of [inputs, outputs].entries()) {
-        for (const [index, material] of items.entries()) {
-          const output = side === 1
-          const materialId = add(`material:${node.id}:${material.id}`, x + (output ? 280 : -248) / column, y + index * 84, {
-            kind: 'material', title: material.name, subtitle: materialRoles[material.role], material, operationName: node.name, planId: node.id,
-          })
-          const incoming = material.role === 'incorporated' || material.role === 'consumable'
-          edges.push({
-            id: `material-edge:${node.id}:${material.id}`, source: output ? id : materialId, target: output ? materialId : id,
-            sourceHandle: output ? 'material-out' : 'material-source', targetHandle: output ? 'material-target' : 'material-in', type: 'smoothstep',
-            ariaLabel: `${materialRoles[material.role]}: ${material.name} ${output ? 'from' : 'at'} ${node.name}`,
-            data: { kind: 'material' }, markerEnd: incoming || output ? MarkerType.ArrowClosed : undefined,
-            style: { stroke: incoming || output ? '#00897b' : '#78909c', strokeWidth: 2, strokeDasharray: '3 5' },
-          })
-        }
-      }
+      addMaterials(id, node.id, node.name, inputs, outputs, x, y)
       y += height + gap
       if (node.kind !== 'step' && node.kind !== 'call') {
         const branches = (node.kind === 'parallel' || node.kind === 'decision')

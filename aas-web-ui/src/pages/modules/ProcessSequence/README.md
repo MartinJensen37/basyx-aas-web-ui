@@ -80,3 +80,10 @@ The product number is one-based and belongs to the current production run. Every
 In **Combined steps**, change **Product number in run** to preview both paths. Skipped operations do not become required predecessors. The saved condition is an AAS collection with semantic IDs for ConditionType, EveryNProducts and CounterScope. All saved definitions now use PlanSchema `production-sequence/2.0`. Earlier scope-based and JSON formats remain readable and migrate on save. See the template contract for details.
 
 The prepared **Vial 2 mL - inspection every 5** recipe demonstrates this flow without changing the existing recipes.
+
+
+## Material flow
+
+Material cards appear automatically beside operations using their ProcessBoM references. Green dotted arrows show added components/consumables and produced materials. Gray dotted links identify an existing workpiece or an unclassified legacy material. Click a card to inspect its role, quantity and BoM occurrence, or open the part's sequence. Use Hide materials to focus on execution order.
+
+The pharma examples declare one stopper per stoppering cycle and link each dose's liquid quantity to its FillVolume parameter. The packing tray enters at Packing, which also declares the finished product. Material requirements live in Process Parameters; only changed requirements are stored as sequence overrides. See the [material-use contract](templates/README.md#material-use-and-diagram-connections) for semantic IDs and fields.
