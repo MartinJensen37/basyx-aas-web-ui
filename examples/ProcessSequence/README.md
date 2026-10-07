@@ -45,8 +45,9 @@ The center canvas shows process nodes, subprocess calls, and parallel split/join
 zoom to explore; **Fit graph** restores the overview. Click a node for its parameters in the right
 inspector, or **Open subprocess** to descend into that plan. The left tree selects product/assembly scopes.
 Select a node to insert after it, a branch header to insert its first step, or **Complete** to append.
-Use the toolbar to add steps/calls/parallel groups or reorder the selected step. Branch names and extra
-branches are managed in the split node's inspector. Edges follow this structured order automatically.
+Use **Add step**, then the node's **Step type** selector to choose an operation, subprocess call,
+decision, parallel group or optional flow. Reorder the selected step with the toolbar arrows. Branch
+names and extra branches are managed in the split node's inspector. Edges follow this structured order automatically.
 **Save draft** stores the plan with the product; **Combined steps** expands subprocesses into a table.
 
 The example includes:
@@ -81,8 +82,9 @@ To rebuild just the UI while keeping the backend running:
 docker compose -f examples/ProcessSequence/docker-compose.yml up -d --build --no-deps aas-web-ui
 ```
 
-The demo Dockerfile normalizes Windows shell-script line endings and uses `pnpm build-only` to avoid
-checkout-wide CRLF lint failures during image construction. Run host checks before handing off changes:
+Git attributes keep linted sources and shell scripts in LF format on Windows and in Docker. The
+demo Dockerfile uses `pnpm build-only`; lint, type checks and tests are separate verification steps.
+Run them before handing off changes:
 
 ```sh
 cd aas-web-ui
@@ -102,7 +104,7 @@ Vials run Unpacking, Loading, Filling, Stoppering, Capping, Inspection, Unloadin
 
 Each recipe has its own container, quantities, liquid/material references, diameter, volume and stopper parameters. Shared stoppers, liquids, caps and trays have their own AASs, Process Parameters, BoM and empty shared sequence. They can acquire subprocesses later and be edited either directly or through a product tree.
 
-Six station AASs provide format-specific capabilities and linked skills: loading, filling, stoppering, capping, inspection and unloading. Capability properties include container type, grasp diameter, fill volume, absolute fill error, stopper/cap diameter and inspection method. Select a Filling node and expand its filling-station comparison to see the required and offered values.
+Six station AASs provide format-specific capabilities and linked skills: loading, filling, stoppering, capping, inspection and unloading. Capability properties include container type, grasp diameter, fill volume, absolute fill error, stopper/cap diameter and inspection method. Select a Filling node and choose **Match resources** in Capabilities to compare the required and offered values.
 
 The normal AAS viewer exposes **ProductionSequence > Steps** as collections and properties. Each assembly stores only its own steps. Calls reference the next sequence submodel directly; local subprocesses appear as separate **ProductionSubprocess** submodels. Process inputs inherit their Process Parameters definitions, with only edited values saved under **ParameterOverrides**. Required capabilities and station skills remain references. Save draft writes this structure. The [AAS template](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/ProductionSequence.json) and [contract](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/README.md) document it.
 
@@ -113,4 +115,16 @@ Seeding creates missing pharma objects and preserves existing objects and edits.
 
 Select **Vial 2 mL - inspection every 5** for a prepared optional inspection flow. Products 5, 10, 15, etc. take the inspection path; other products go directly to Unloading. Use **Combined steps > Product number in run** to preview the difference. The original six recipes remain unchanged; seeding adds this seventh recipe and preserves existing edits.
 
-For any recipe, select an operation and choose **Make optional**, or add an **Optional flow** and place operations or subprocess calls in its Run path. Set the interval in the inspector. **Run every product** removes the wrapper without discarding its contents. The rule is saved in the native ProductionSequence submodel; an execution system must provide the product counter when running the plan.
+For any recipe, select an operation and choose **Optional** from **Step type**, or use **Add step** and change its type to **Optional**. Place operations or subprocess calls in its Run path and set the interval in the inspector. **Remove condition** removes the wrapper without discarding its contents. The rule is saved in the native ProductionSequence submodel; an execution system must provide the product counter when running the plan.
+
+## Material flow
+
+Material cards appear automatically from each operation's ProcessBoM references. Filling uses the
+recipe's effective fill volume; each stoppering cycle adds one stopper. The tray enters at Packing,
+which declares the finished product. Click a card for its BoM reference or to open the part's sequence.
+Use **Hide materials** to focus on execution order.
+
+Seeding upgrades known demo material links while preserving authored requirements. Unclassified
+legacy links remain visible as Linked material with unspecified quantity. The
+[material-use contract](../../aas-web-ui/src/pages/modules/ProcessSequence/templates/README.md#material-use-and-diagram-connections)
+documents roles, quantities and the distinction between a workpiece and an added component.

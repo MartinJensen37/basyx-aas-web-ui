@@ -75,13 +75,13 @@ A decision has exactly two ordered branches: Order 0 is Yes and Order 1 is No. B
 | --- | --- |
 | Condition | ConditionType=`comparison`, Operator, Unit, Expected; optional Operand for an unfinished draft |
 | Expected | DataType=`boolean`, `number` or `string`; Value typed `xs:boolean`, `xs:double` or `xs:string` respectively |
-| Operand, OperandType=`parameter` | StepId and the paired SourceAas/SourceElement references identifying a effective parameter in that operation |
+| Operand, OperandType=`parameter` | StepId and the paired SourceAas/SourceElement references identifying an effective parameter in that operation |
 | Operand, OperandType=`output` | StepId and OutputId identifying an operation output within the same scope |
 | Operation Outputs | Zero or more Output collections containing OutputId, Name, DataType and Unit |
 
 Operators are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`. Ordered comparisons require numbers. Missing or incompatible values, removed sources, invalid numbers and mismatched units remain unresolved; they never select No or Skip. Unit conversion is not implicit. Output IDs are unique within an operation, and node IDs remain unique within a scope. Semantic IDs use the existing application namespace with the field names above. Display-name changes do not change references.
 
-Operation outputs are declarations, not execution values. Preview results are scoped to each invocation and stay in browser component state. An output may be referenced after its operation, within its branch, and after an all-branches parallel join. A sibling parallel branch cannot consume it before the join. Outputs introduced inside decisions or optional flows cannot escape their selected-path merge until explicit merge mappings are implemented. Calls isolate output values; cross-subprocess mappings are not yet supported. A condition can read a effective parameter as a definition input independently of when that operation runs.
+Operation outputs are declarations, not execution values. Preview results are scoped to each invocation and stay in browser component state. An output may be referenced after its operation, within its branch, and after an all-branches parallel join. A sibling parallel branch cannot consume it before the join. Outputs introduced inside decisions or optional flows cannot escape their selected-path merge until explicit merge mappings are implemented. Calls isolate output values; cross-subprocess mappings are not yet supported. A condition can read an effective parameter as a definition input independently of when that operation runs.
 
 All these flow shapes are supported by `production-sequence/2.0`. Unsupported schema values and unknown condition/node types are rejected rather than silently dropped.
 

@@ -1,1 +1,14 @@
-* text=lf
+* text=auto
+
+# Keep executable scripts and linted sources LF on Windows and in Docker.
+*.sh text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.mts text eol=lf
+*.cts text eol=lf
+*.vue text eol=lf
+aas-web-ui/pnpm-workspace.yaml text eol=lf

@@ -1,5 +1,5 @@
 import type { PlanParameter, PlanProcess, PlanScope, SourceReference } from '../types/plan.ts'
-import { PROCESS_STEP_CAPABILITY_SEMANTIC_ID } from '../constants/contracts.ts'
+import { PROCESS_STEP_CAPABILITY_SEMANTIC_ID, processParameterSemantic } from '../constants/contracts.ts'
 import { capabilityReferenceSchema } from '../types/plan.ts'
 
 type Element = Record<string, any>
@@ -10,7 +10,7 @@ export function childrenOf (element: Element): Element[] {
 }
 
 function named (element: Element, name: string): Element | undefined {
-  const expected = `https://admin-shell.io/idta/ProcessParameters/${name}/1/0`
+  const expected = processParameterSemantic(name)
   return childrenOf(element).find(child => semanticId(child) === expected)
     ?? childrenOf(element).find(child => !semanticId(child) && child.idShort === name)
 }
@@ -54,7 +54,7 @@ export function readMaterialScopes (submodel: Element, aasId: string, rootId: st
 
 function parameterLeaves (element: Element, source: SourceReference, group: PlanParameter['group']): PlanParameter[] {
   const children = childrenOf(element)
-  if (Array.isArray(children) && (element.modelType === 'SubmodelElementCollection' || element.modelType === 'SubmodelElementList')) {
+  if (element.modelType === 'SubmodelElementCollection' || element.modelType === 'SubmodelElementList') {
     return children.flatMap((child, index) => parameterLeaves(child, {
       ...source, path: [...source.path, child.idShort ?? String(index)],
     }, group))
@@ -74,7 +74,7 @@ export function readPlanProcesses (submodel: Element, aasId: string): PlanProces
     return []
   }
   return childrenOf(container).filter(process => process.modelType === 'SubmodelElementCollection'
-    && (!semanticId(process) || semanticId(process) === 'https://admin-shell.io/idta/ProcessParameters/Process/1/0')
+    && (!semanticId(process) || semanticId(process) === processParameterSemantic('Process'))
     && named(process, 'ProcessId')).map(process => {
     const source = { aasId, submodelId: String(submodel.id), path: [String(container.idShort), String(process.idShort)] }
     const parameters: PlanParameter[] = []

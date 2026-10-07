@@ -1,8 +1,8 @@
 import type { SkillCatalog, SkillDefinition } from '../types'
+import { skillSemantic } from '../constants/contracts'
 import { childrenOf, semanticId } from './planSources'
 
 type Element = Record<string, any>
-const skillSemantic = (name: string) => `https://smartproductionlab.aau.dk/Skills/${name}/1/0`
 function named (element: Element, name: string): Element | undefined {
   return childrenOf(element).find(child => semanticId(child) === skillSemantic(name))
     ?? childrenOf(element).find(child => !semanticId(child) && child.idShort === name)

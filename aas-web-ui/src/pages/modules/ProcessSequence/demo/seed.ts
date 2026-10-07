@@ -1,5 +1,6 @@
 import type { PlanProcess, PlanScope, ProcessPlan, StepNode } from '../types/plan.ts'
 import { Buffer } from 'node:buffer'
+import { HIERARCHICAL_STRUCTURES_SUBMODEL, PROCESS_PARAMETERS_SUBMODEL, PROCESS_STEP_CAPABILITY_SEMANTIC_ID, processParameterSemantic, SKILLS_SUBMODEL_SEMANTIC_ID } from '../constants/contracts.ts'
 import { materialSemantic, upgradeMaterialUses } from '../utils/materials.ts'
 import { readPlanProcesses } from '../utils/planSources.ts'
 import { extractAssembly } from '../utils/planTree.ts'
@@ -19,7 +20,7 @@ const reference = (type: string, value: string) => ({ type: 'ModelReference', ke
 const property = (idShort: string, value: string, valueType = 'xs:string') => ({ modelType: 'Property', idShort, value, valueType })
 const collection = (idShort: string, value: unknown[]) => ({ modelType: 'SubmodelElementCollection', idShort, value })
 const indexed = (prefix: string, index: number) => `${prefix}__${String(index).padStart(2, '0')}__`
-const ppSemantic = (name: string) => semantic(`https://admin-shell.io/idta/ProcessParameters/${name}/1/0`)
+const ppSemantic = (name: string) => semantic(processParameterSemantic(name))
 const capSemantic = (name: string) => semantic(`https://admin-shell.io/idta/CapabilityDescription/${name}/1/0`)
 const capabilityId = (owner: string) => `${demo}/sm/${owner}/CapabilityDescription`
 function capabilityReference (owner: string, skill: string) {
@@ -108,10 +109,10 @@ export function buildDemo (): { shells: JsonModel[], submodels: JsonModel[], pla
   ])
   submodels.push({
     modelType: 'Submodel', id: bomId, idShort: 'HierarchicalStructures',
-    semanticId: semantic('https://admin-shell.io/idta/HierarchicalStructures/1/0/Submodel'),
+    semanticId: semantic(HIERARCHICAL_STRUCTURES_SUBMODEL.semanticId),
     submodelElements: [{
       modelType: 'Entity', idShort: 'Product', entityType: 'SelfManagedEntity', globalAssetId: `${demo}/asset/product`,
-      semanticId: semantic('https://admin-shell.io/idta/HierarchicalStructures/EntryNode/1/0'), statements: [drive, control],
+      semanticId: semantic(HIERARCHICAL_STRUCTURES_SUBMODEL.entryNodeSemanticId), statements: [drive, control],
     }],
   })
 
@@ -120,8 +121,8 @@ export function buildDemo (): { shells: JsonModel[], submodels: JsonModel[], pla
       const entity = structuredClone(owner === 'drive' ? drive : control) as Record<string, unknown>
       submodels.push({
         modelType: 'Submodel', id: `${demo}/sm/${owner}/bom`, idShort: 'HierarchicalStructures',
-        semanticId: semantic('https://admin-shell.io/idta/HierarchicalStructures/1/0/Submodel'),
-        submodelElements: [{ ...entity, semanticId: semantic('https://admin-shell.io/idta/HierarchicalStructures/EntryNode/1/0') }],
+        semanticId: semantic(HIERARCHICAL_STRUCTURES_SUBMODEL.semanticId),
+        submodelElements: [{ ...entity, semanticId: semantic(HIERARCHICAL_STRUCTURES_SUBMODEL.entryNodeSemanticId) }],
       })
     }
     addCapabilities(owner, 'Required', [...new Set(specifications.filter(spec => spec.owner === owner).map(spec => spec.skill))])
@@ -156,7 +157,7 @@ export function buildDemo (): { shells: JsonModel[], submodels: JsonModel[], pla
           modelType: 'ReferenceElement', idShort: 'RequiredCapability',
           displayName: [{ language: 'en', text: spec.skill }],
           value: capabilityReference(owner, spec.skill),
-          semanticId: semantic(`${base}/ProcessParameters/RequiredCapability/1/0`),
+          semanticId: semantic(PROCESS_STEP_CAPABILITY_SEMANTIC_ID),
         },
         ]),
         semanticId: ppSemantic('Process'),
@@ -164,7 +165,7 @@ export function buildDemo (): { shells: JsonModel[], submodels: JsonModel[], pla
     })
     submodels.push({
       modelType: 'Submodel', id: sourceId(owner), idShort: 'ProcessParameters',
-      semanticId: semantic('https://admin-shell-io/idta/SubmodelTemplate/ProcessParameters/1/0'),
+      semanticId: semantic(PROCESS_PARAMETERS_SUBMODEL.semanticId),
       submodelElements: [{ ...collection('Processes', elements), semanticId: ppSemantic('Processes') }],
     })
     shells.push({
@@ -190,7 +191,7 @@ export function buildDemo (): { shells: JsonModel[], submodels: JsonModel[], pla
     ]))
     submodels.push({
       modelType: 'Submodel', id: skillsId, idShort: 'Skills',
-      semanticId: semantic(`${base}/SubmodelTemplate/Skills/1/0`), submodelElements: skills,
+      semanticId: semantic(SKILLS_SUBMODEL_SEMANTIC_ID), submodelElements: skills,
     })
     shells.push({
       modelType: 'AssetAdministrationShell', id: aasId(resource), idShort: name,

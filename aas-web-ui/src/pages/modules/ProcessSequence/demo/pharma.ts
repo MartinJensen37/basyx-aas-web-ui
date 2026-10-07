@@ -1,4 +1,5 @@
 import type { PlanNode, PlanProcess, ProcessPlan, StepNode } from '../types/plan.ts'
+import { HIERARCHICAL_STRUCTURES_SUBMODEL, PROCESS_PARAMETERS_SUBMODEL, PROCESS_STEP_CAPABILITY_SEMANTIC_ID, processParameterSemantic, SKILLS_SUBMODEL_SEMANTIC_ID, skillSemantic } from '../constants/contracts.ts'
 import { materialUse } from '../utils/materials.ts'
 import { readPlanProcesses } from '../utils/planSources.ts'
 import { buildSequenceDocuments } from '../utils/sequenceDocuments.ts'
@@ -6,7 +7,6 @@ import { modelRef } from '../utils/sequenceModel.ts'
 
 export const PHARMA_BASE = 'https://smartproductionlab.aau.dk/demo/pharma'
 const sem = (value: string) => ({ type: 'ExternalReference', keys: [{ type: 'GlobalReference', value }] })
-const pp = (name: string) => `https://admin-shell.io/idta/ProcessParameters/${name}/1/0`
 const cap = (name: string) => `https://admin-shell.io/idta/CapabilityDescription/${name}/1/0`
 const meaning = (name: string) => `${PHARMA_BASE}/semantics/${name}`
 /** The shared vocabulary: what a capability or one of its properties means, for every product and resource. */
@@ -75,8 +75,8 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
     if (shells.some(shell => shell.id === aas(owner))) {
       return
     }
-    submodels.push(submodel(sm(owner, 'parameters'), 'ProcessParameters', 'https://admin-shell-io/idta/SubmodelTemplate/ProcessParameters/1/0', [collection('Processes', [], pp('Processes'))]),
-      submodel(sm(owner, 'bom'), 'HierarchicalStructures', 'https://admin-shell.io/idta/HierarchicalStructures/1/0/Submodel', []),
+    submodels.push(submodel(sm(owner, 'parameters'), 'ProcessParameters', PROCESS_PARAMETERS_SUBMODEL.semanticId, [collection('Processes', [], processParameterSemantic('Processes'))]),
+      submodel(sm(owner, 'bom'), 'HierarchicalStructures', HIERARCHICAL_STRUCTURES_SUBMODEL.semanticId, []),
       submodel(sm(owner, 'specification'), 'ComponentSpecification', meaning('ComponentSpecification'), specifications.map(item => ({ ...property(item.name, item.value ?? ''), ...unitDefinition(item.name, item.unit) }))))
     savePlan({ schema: 'process-sequence-plan/3.0', productAasId: aas(owner), revision: 0, rootScopeId: 'product', scopes: [{ id: 'product', name, parentId: null, material: null, nodes: [] }] })
     shell(owner, name, [sm(owner, 'parameters'), sm(owner, 'bom'), sm(owner, 'specification'), planId(aas(owner))])
@@ -103,19 +103,18 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
         limits.push({ name: 'InspectionMethod', value: 'vision' })
       }
       capabilities.push(capability(owner, name, operation, 'Offered', limits))
-      const skillSem = (name: string) => `https://smartproductionlab.aau.dk/Skills/${name}/1/0`
-      skills.push(collection(name, [property('SkillId', name, skillSem('SkillId')), property('SkillName', `${operation} ${format}`, skillSem('SkillName')),
-        reference('ProvidedCapability', sem(vocabulary(operation)) as ReturnType<typeof modelRef>, skillSem('ProvidedCapability')),
+      skills.push(collection(name, [property('SkillId', name, skillSemantic('SkillId')), property('SkillName', `${operation} ${format}`, skillSemantic('SkillName')),
+        reference('ProvidedCapability', sem(vocabulary(operation)) as ReturnType<typeof modelRef>, skillSemantic('ProvidedCapability')),
         collection('Parameters', limits.filter(item => item.name !== 'AbsoluteFillError').map(item => collection(item.name, [
-          property('ParameterId', item.name, skillSem('ParameterId')), property('ParameterName', item.name, skillSem('ParameterName')),
-          property('DataType', typeof item.value === 'string' ? 'xs:string' : 'xs:double', skillSem('DataType')),
-          property('Unit', item.unit ?? '', skillSem('Unit')), property('DefaultValue', item.value ?? item.min ?? '', skillSem('DefaultValue')),
-          ...(item.min === undefined ? [] : [property('MinValue', item.min, skillSem('MinValue')), property('MaxValue', item.max!, skillSem('MaxValue'))]),
-        ], skillSem('Parameter'))), skillSem('Parameters')),
-      ], skillSem('Skill')))
+          property('ParameterId', item.name, skillSemantic('ParameterId')), property('ParameterName', item.name, skillSemantic('ParameterName')),
+          property('DataType', typeof item.value === 'string' ? 'xs:string' : 'xs:double', skillSemantic('DataType')),
+          property('Unit', item.unit ?? '', skillSemantic('Unit')), property('DefaultValue', item.value ?? item.min ?? '', skillSemantic('DefaultValue')),
+          ...(item.min === undefined ? [] : [property('MinValue', item.min, skillSemantic('MinValue')), property('MaxValue', item.max!, skillSemantic('MaxValue'))]),
+        ], skillSemantic('Parameter'))), skillSemantic('Parameters')),
+      ], skillSemantic('Skill')))
     }
     submodels.push(submodel(sm(owner, 'capabilities'), 'CapabilityDescription', 'https://admin-shell.io/idta/SubmodelTemplate/CapabilityDescription/1/0', [collection('Capabilities', capabilities, cap('CapabilitySet'))]),
-      submodel(sm(owner, 'skills'), 'Skills', 'https://smartproductionlab.aau.dk/SubmodelTemplate/Skills/1/0', skills))
+      submodel(sm(owner, 'skills'), 'Skills', SKILLS_SUBMODEL_SEMANTIC_ID, skills))
     shell(owner, `${operation} station`, [sm(owner, 'capabilities'), sm(owner, 'skills')], true)
   }
 
@@ -132,7 +131,7 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
       emptyPart(part.id, part.name, part.specs)
     }
     const entities = parts.map((part, index) => ({ modelType: 'Entity', idShort: `Part_${index}`, displayName: [{ language: 'en', text: part.name }], entityType: 'SelfManagedEntity', globalAssetId: `${PHARMA_BASE}/asset/${part.id}`, statements: [property('Quantity', part.quantity), property('QuantityUnit', part.id.startsWith('demo-liquid') ? 'mL' : 'piece')] }))
-    submodels.push(submodel(bomId, 'HierarchicalStructures', 'https://admin-shell.io/idta/HierarchicalStructures/1/0/Submodel', [{ modelType: 'Entity', idShort: 'Product', entityType: 'SelfManagedEntity', globalAssetId: `${PHARMA_BASE}/asset/${recipe.id}`, semanticId: sem('https://admin-shell.io/idta/HierarchicalStructures/EntryNode/1/0'), statements: entities }]))
+    submodels.push(submodel(bomId, 'HierarchicalStructures', HIERARCHICAL_STRUCTURES_SUBMODEL.semanticId, [{ modelType: 'Entity', idShort: 'Product', entityType: 'SelfManagedEntity', globalAssetId: `${PHARMA_BASE}/asset/${recipe.id}`, semanticId: sem(HIERARCHICAL_STRUCTURES_SUBMODEL.entryNodeSemanticId), statements: entities }]))
     const sequence = ['Unpacking', 'Loading', ...recipe.volume.flatMap((_, index) => [`Filling_${index + 1}`, `Stoppering_${index + 1}`]), ...(recipe.format === 'vial' ? ['Capping'] : []), 'Inspection', 'Unloading', 'Packing']
     const processes: unknown[] = []
     const capabilities: unknown[] = []
@@ -184,19 +183,19 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
         material.push(materialUse('FinishedProduct', recipe.name, modelRef([{ type: 'Submodel', value: bomId }, { type: 'Entity', value: 'Product' }]), 'output', { value: 1, unit: 'piece' }))
       }
       const process: PlanProcess = { processId: id, name, source, parameters, material, requiredCapabilities }
-      processes.push(collection(`Process_${index}`, [property('ProcessId', id, pp('ProcessId')), property('ProcessName', name, pp('ProcessName')),
-        { modelType: 'MultiLanguageProperty', idShort: 'ProcessDescription', semanticId: sem(pp('ProcessDescription')), value: [{ language: 'en', text: `${name} for ${recipe.name}. Illustrative engineering recipe.` }] },
-        property('PlannedProcessTime', 'PT5S', pp('PlannedProcessTime'), 'xs:duration'),
-        collection('ProductParameters', parameters.filter(parameter => parameter.group === 'ProductParameters').map(parameter => ({ ...property(parameter.name, parameter.value, meaning(parameter.name), parameter.dataType), ...unitDefinition(parameter.name, limits.find(item => item.name === parameter.name)?.unit) })), pp('ProductParameters')),
-        collection('ProcessParameters', [property('Cycle', cycle), property('RecipeNote', 'Illustrative values; editable engineering demo')], pp('ProcessParameters')),
-        collection('ResourceParameters', [], pp('ResourceParameters')), collection('ProcessBoM', material, pp('ProcessBoM')),
-        ...requiredCapabilities.map(item => ({ ...reference('RequiredCapability', item.reference, 'https://smartproductionlab.aau.dk/ProcessParameters/RequiredCapability/1/0'), displayName: [{ language: 'en', text: name }] })),
-      ], pp('Process')))
+      processes.push(collection(`Process_${index}`, [property('ProcessId', id, processParameterSemantic('ProcessId')), property('ProcessName', name, processParameterSemantic('ProcessName')),
+        { modelType: 'MultiLanguageProperty', idShort: 'ProcessDescription', semanticId: sem(processParameterSemantic('ProcessDescription')), value: [{ language: 'en', text: `${name} for ${recipe.name}. Illustrative engineering recipe.` }] },
+        property('PlannedProcessTime', 'PT5S', processParameterSemantic('PlannedProcessTime'), 'xs:duration'),
+        collection('ProductParameters', parameters.filter(parameter => parameter.group === 'ProductParameters').map(parameter => ({ ...property(parameter.name, parameter.value, meaning(parameter.name), parameter.dataType), ...unitDefinition(parameter.name, limits.find(item => item.name === parameter.name)?.unit) })), processParameterSemantic('ProductParameters')),
+        collection('ProcessParameters', [property('Cycle', cycle), property('RecipeNote', 'Illustrative values; editable engineering demo')], processParameterSemantic('ProcessParameters')),
+        collection('ResourceParameters', [], processParameterSemantic('ResourceParameters')), collection('ProcessBoM', material, processParameterSemantic('ProcessBoM')),
+        ...requiredCapabilities.map(item => ({ ...reference('RequiredCapability', item.reference, PROCESS_STEP_CAPABILITY_SEMANTIC_ID), displayName: [{ language: 'en', text: name }] })),
+      ], processParameterSemantic('Process')))
       const station = stationName(operation)
       return { id, kind: 'step', name, process, requiredCapabilities, executionMode: manual ? 'manual' : 'station', resourceAasId: manual ? '' : aas(station), skillId: manual ? '' : `${operation}_${recipe.format}`,
         ...(manual ? {} : { skillReference: skillRef(station, `${operation}_${recipe.format}`) }), bindings: manual ? [] : parameters.filter(parameter => parameter.group === 'ProductParameters').map(parameter => ({ name: parameter.name, value: '', source: parameter.source })) }
     })
-    submodels.push(submodel(sm(recipe.id, 'parameters'), 'ProcessParameters', 'https://admin-shell-io/idta/SubmodelTemplate/ProcessParameters/1/0', [collection('Processes', processes, pp('Processes'))]),
+    submodels.push(submodel(sm(recipe.id, 'parameters'), 'ProcessParameters', PROCESS_PARAMETERS_SUBMODEL.semanticId, [collection('Processes', processes, processParameterSemantic('Processes'))]),
       submodel(sm(recipe.id, 'capabilities'), 'CapabilityDescription', 'https://admin-shell.io/idta/SubmodelTemplate/CapabilityDescription/1/0', [collection('Capabilities', capabilities, cap('CapabilitySet'))]))
     const plannedNodes: PlanNode[] = nodes.map(node => node.id === 'Inspection' && recipe.inspectionEvery
       ? { id: 'periodic-inspection', kind: 'conditional', name: 'Periodic inspection', condition: { kind: 'everyNthProduct', every: recipe.inspectionEvery }, nodes: [node] }

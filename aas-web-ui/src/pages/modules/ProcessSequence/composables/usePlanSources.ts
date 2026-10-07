@@ -3,7 +3,7 @@ import { useAASHandling } from '@/composables/AAS/AASHandling'
 import { useSMHandling } from '@/composables/AAS/SMHandling'
 import { useAASDiscoveryClient } from '@/composables/Client/AASDiscoveryClient'
 import { useAASRepositoryClient } from '@/composables/Client/AASRepositoryClient'
-import { PROCESS_PARAMETERS_SUBMODEL } from '../constants/contracts'
+import { PROCESS_PARAMETERS_SUBMODEL, SKILLS_SUBMODEL_SEMANTIC_ID } from '../constants/contracts'
 import { readCapabilities } from '../utils/capabilities'
 import { readMaterialScopes, readPlanProcesses, semanticId } from '../utils/planSources'
 import { readSkillCatalog } from '../utils/readers'
@@ -63,7 +63,7 @@ export function usePlanSources () {
     const shells = await fetchAasList()
     const results = await Promise.allSettled(shells.map(async shell => ({
       shell,
-      eligible: (await submodels(String(shell.id))).some(model => semanticId(model) === 'https://smartproductionlab.aau.dk/SubmodelTemplate/Skills/1/0'
+      eligible: (await submodels(String(shell.id))).some(model => semanticId(model) === SKILLS_SUBMODEL_SEMANTIC_ID
         || readCapabilities(model, String(shell.id)).some(capability => capability.role === 'Offered')),
     })))
     return results.flatMap(result => result.status === 'fulfilled' && result.value.eligible ? [result.value.shell] : [])

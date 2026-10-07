@@ -5,20 +5,11 @@ export const PROCESS_PARAMETERS_SUBMODEL = {
   semanticId: 'https://admin-shell-io/idta/SubmodelTemplate/ProcessParameters/1/0',
 } as const
 
-const PROCESS_PARAMETERS_SEMANTIC_ID_BASE = 'https://admin-shell.io/idta/ProcessParameters'
+/** Element meanings use admin-shell.io; the published submodel identifier above uses admin-shell-io. */
+export const processParameterSemantic = (name: string) => `https://admin-shell.io/idta/ProcessParameters/${name}/1/0`
 
-export const PROCESS_PARAMETERS_ELEMENT_SEMANTIC_IDS = {
-  processes: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/Processes/1/0`,
-  process: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/Process/1/0`,
-  processId: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/ProcessId/1/0`,
-  processName: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/ProcessName/1/0`,
-  processDescription: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/ProcessDescription/1/0`,
-  plannedProcessTime: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/PlannedProcessTime/1/0`,
-  productParameters: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/ProductParameters/1/0`,
-  processParameters: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/ProcessParameters/1/0`,
-  resourceParameters: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/ResourceParameters/1/0`,
-  processBom: `${PROCESS_PARAMETERS_SEMANTIC_ID_BASE}/ProcessBoM/1/0`,
-} as const
+export const SKILLS_SUBMODEL_SEMANTIC_ID = `${PROCESS_SEQUENCE_IRI_BASE}/SubmodelTemplate/Skills/1/0`
+export const skillSemantic = (name: string) => `${PROCESS_SEQUENCE_IRI_BASE}/Skills/${name}/1/0`
 
 /**
  * Repeatable ReferenceElement extension added to an IDTA 02031 process collection.
