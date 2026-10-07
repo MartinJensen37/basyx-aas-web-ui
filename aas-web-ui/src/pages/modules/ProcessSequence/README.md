@@ -42,7 +42,7 @@ Production Sequence and Skills are application templates, not published IDTA sta
 
 ## Capability matching
 
-Capability meanings come from supplemental semantic IDs. Required/Offered roles use the IDTA boolean role qualifiers. Matching requires one complete offered capability to satisfy each requirement; properties from incompatible station configurations are never combined. Property identities also use supplemental semantic IDs.
+Capability meanings come from supplemental semantic IDs. The pharma recipes and stations name capabilities and their properties in the lab's shared vocabulary (`https://smartproductionlab.aau.dk/semantics/<Name>`, kept as an ontology in iec61499-mgmt-py `ontology/Vocabulary`), so a product's requirement matches the offer of any resource that uses the same names, including the IEC 61499 modules. Required/Offered roles use the IDTA boolean role qualifiers. Matching requires one complete offered capability to satisfy each requirement; properties from incompatible station configurations are never combined. Property identities also use supplemental semantic IDs.
 
 A required scalar must lie within an offered numeric interval. A required interval describes acceptable results: an offered scalar must lie within it (for example, maximum permitted absolute fill error). String values must agree. Units must match exactly. Missing properties, unknown datatypes, unverified unit conversions, range-to-range comparisons and additional constraints produce **Needs verification**. Matching does not reserve equipment or execute skills.
 

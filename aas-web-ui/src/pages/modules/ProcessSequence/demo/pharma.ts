@@ -9,6 +9,9 @@ const sem = (value: string) => ({ type: 'ExternalReference', keys: [{ type: 'Glo
 const pp = (name: string) => `https://admin-shell.io/idta/ProcessParameters/${name}/1/0`
 const cap = (name: string) => `https://admin-shell.io/idta/CapabilityDescription/${name}/1/0`
 const meaning = (name: string) => `${PHARMA_BASE}/semantics/${name}`
+/** The shared vocabulary: what a capability or one of its properties means, for every product and resource. */
+export const VOCABULARY_BASE = 'https://smartproductionlab.aau.dk/semantics'
+const vocabulary = (name: string) => `${VOCABULARY_BASE}/${name}`
 const property = (idShort: string, value: string | number, semanticId = meaning(idShort), valueType = typeof value === 'number' ? 'xs:double' : 'xs:string') => ({ modelType: 'Property', idShort, semanticId: sem(semanticId), valueType, value: String(value) })
 const collection = (idShort: string, value: unknown[], semanticId = meaning(idShort)) => ({ modelType: 'SubmodelElementCollection', idShort, semanticId: sem(semanticId), value })
 const reference = (idShort: string, value: ReturnType<typeof modelRef>, semanticId = meaning(idShort)) => ({ modelType: 'ReferenceElement', idShort, semanticId: sem(semanticId), value })
@@ -50,7 +53,7 @@ function capability (owner: string, name: string, operation: string, role: 'Requ
       ...(limit.value === undefined
         ? { modelType: 'Range', idShort: 'Value', valueType: 'xs:double', min: String(limit.min), max: String(limit.max), semanticId: sem('https://admin-shell.io/idta/CapabilityPropertyEnumType/Range/1/0') }
         : property('Value', limit.value, 'https://admin-shell.io/idta/CapabilityPropertyType/Property/1/0')),
-      displayName: [{ language: 'en', text: limit.name }], supplementalSemanticIds: [sem(meaning(limit.name))], ...unitDefinition(limit.name, limit.unit),
+      displayName: [{ language: 'en', text: limit.name }], supplementalSemanticIds: [sem(vocabulary(limit.name))], ...unitDefinition(limit.name, limit.unit),
     }], cap('PropertyContainer'))), cap('PropertySet')),
     ...(role === 'Offered' ? [collection('Relations', [{ modelType: 'RelationshipElement', idShort: 'RealizedBy', semanticId: sem(cap('CapabilityRealizedBy')), first: capRef(owner, name), second: skillRef(owner, name) }], cap('CapabilityRelations'))] : []),
   ], cap('CapabilityContainer'))
@@ -102,7 +105,7 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
       capabilities.push(capability(owner, name, operation, 'Offered', limits))
       const skillSem = (name: string) => `https://smartproductionlab.aau.dk/Skills/${name}/1/0`
       skills.push(collection(name, [property('SkillId', name, skillSem('SkillId')), property('SkillName', `${operation} ${format}`, skillSem('SkillName')),
-        reference('ProvidedCapability', sem(meaning(operation)) as ReturnType<typeof modelRef>, skillSem('ProvidedCapability')),
+        reference('ProvidedCapability', sem(vocabulary(operation)) as ReturnType<typeof modelRef>, skillSem('ProvidedCapability')),
         collection('Parameters', limits.filter(item => item.name !== 'AbsoluteFillError').map(item => collection(item.name, [
           property('ParameterId', item.name, skillSem('ParameterId')), property('ParameterName', item.name, skillSem('ParameterName')),
           property('DataType', typeof item.value === 'string' ? 'xs:string' : 'xs:double', skillSem('DataType')),
