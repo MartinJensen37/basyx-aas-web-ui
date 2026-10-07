@@ -1,4 +1,4 @@
-﻿<template>
+ï»¿<template>
   <v-treeview
     aria-label="Process parameter tree"
     class="parameter-tree"
@@ -27,12 +27,12 @@
 </template>
 
 <script setup lang="ts">
-  import type { PlanProcess } from '../types/plan'
-  import { materialLabels } from '../utils/planSources'
+  import type { PlanProcess, PlanScope } from '../types/plan'
+  import { materialAmount, materialRoles, readMaterialUses } from '../utils/materials'
 
   type ParameterItem = { id: string, title: string, color?: string, help?: string, value?: string, children?: ParameterItem[] }
 
-  const props = defineProps<{ process: PlanProcess }>()
+  const props = defineProps<{ process: PlanProcess, PlanScope }>()
   const groups = [
     { id: 'ProductParameters', title: 'Product parameters', color: 'primary' },
     { id: 'ProcessParameters', title: 'Process parameters', color: 'success' },
@@ -43,10 +43,10 @@
       ...group,
       children: props.process.parameters.filter(parameter => parameter.group === group.id).map(parameter => ({
         id: JSON.stringify(parameter.source), title: parameter.name, value: parameter.value ? `${parameter.value}${parameter.unit ? ` ${parameter.unit}` : ''}` : 'Not set',
-        help: `${parameter.dataType} · ${parameter.source.path.join(' / ')}`,
+        help: `${parameter.dataType} Â· ${parameter.source.path.join(' / ')}`,
       })),
     })),
-    { id: 'materials', title: 'Process materials', children: materialLabels(props.process.material).map((title, index) => ({ id: `material:${index}`, title })) },
+    { id: 'materials', title: 'Process materials', children: readMaterialUses(props.process, props.materialScopes).map(material => ({ id: `material:${material.id}`, title: material.name, value: `${materialRoles[material.role]} ? ${materialAmount(material)}`, help: material.warning ?? material.reference?.path.join(' / ') })) },
   ])
 </script>
 

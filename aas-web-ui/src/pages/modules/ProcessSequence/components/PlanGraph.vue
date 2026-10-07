@@ -3,6 +3,7 @@
     <div class="d-flex flex-wrap align-center ga-1 px-3 pb-2">
       <v-btn prepend-icon="mdi-plus" size="small" variant="tonal" @click="add">Add step</v-btn>
       <v-spacer />
+      <v-btn :aria-pressed="showMaterials" prepend-icon="mdi-package-variant-closed" size="small" variant="text" @click="showMaterials = !showMaterials; fit()">{{ showMaterials ? 'Hide materials' : 'Show materials' }}</v-btn>
 
       <v-btn
         aria-label="Fit graph"
@@ -40,7 +41,7 @@
       </template>
     </div>
 
-    <p v-if="graph.edges.some(edge => edge.data?.kind === 'result')" class="text-caption px-3 pb-2">Solid arrows: execution order | Dashed arrows: result used by a condition</p>
+    <p v-if="graph.edges.some(edge => edge.data?.kind === 'material' || edge.data?.kind === 'result')" class="text-caption px-3 pb-2">Solid: execution order ? Dotted green: materials added or produced ? Dotted gray: workpiece or linked material ? Dashed purple: results</p>
 
     <div :aria-label="label" class="plan-canvas" role="region">
       <VueFlow
@@ -58,6 +59,10 @@
       >
         <Background :gap="20" pattern-color="#aebbc5" />
         <Controls :show-interactive="false" />
+
+        <template #node-material="{ data }">
+          <PlanMaterialNode :data="data" @open="emit('open', $event)" @select="emit('select', data.planId!)" />
+        </template>
 
         <template #node-plan="{ data, id }">
           <PlanGraphNode
@@ -78,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-  import type { PlanNode, PlanProcess } from '../types/plan'
+  import type { PlanNode, PlanProcess, PlanScope } from '../types/plan'
   import type { PlanGraphData } from '../utils/planGraph'
   import { Background } from '@vue-flow/background'
   import { Controls } from '@vue-flow/controls'
@@ -86,26 +91,28 @@
   import { decisionForOutput } from '../utils/outputDecision'
   import { flattenNodes, newNode } from '../utils/plan'
   import { buildPlanGraph, findLane } from '../utils/planGraph'
+  import PlanMaterialNode from './PlanMaterialNode.vue'
   import PlanGraphNode from './PlanGraphNode.vue'
   import '@vue-flow/core/dist/style.css'
   import '@vue-flow/core/dist/theme-default.css'
   import '@vue-flow/controls/dist/style.css'
 
-  const props = defineProps<{ label: string, selectedId: string, processes: PlanProcess[], targets: { id: string, name: string }[] }>()
+  const props = defineProps<{ label: string, selectedId: string, materialScopes: PlanScope[], processes: PlanProcess[], targets: { id: string, name: string }[] }>()
   const emit = defineEmits<{ 'select': [id: string], 'open': [id: string], 'change-type': [id: string, kind: PlanNode['kind']] }>()
   const nodes = defineModel<PlanNode[]>({ required: true })
   const flowId = `process-plan-${useId()}`
   const { fitView } = useVueFlow({ id: flowId })
   const insertionId = ref('end')
   const branchId = ref('')
-  const graph = computed(() => buildPlanGraph(nodes.value, props.targets, props.selectedId))
+  const showMaterials = ref(true)
+  const graph = computed(() => buildPlanGraph(nodes.value, props.targets, props.selectedId, props.materialScopes, showMaterials.value))
   const nodeMap = computed(() => new Map(flattenNodes(nodes.value).map(node => [node.id, node])))
   const selected = computed(() => flattenNodes(nodes.value).find(node => node.id === props.selectedId))
   const location = computed(() => findLane(nodes.value, props.selectedId || branchId.value))
   const insertionLabel = computed(() => {
     if (selected.value) return `Insert after ${selected.value.name}`
     if (branchId.value) return `Insert at start of ${graph.value.nodes.find(node => node.data?.branchId === branchId.value)?.data?.title ?? 'branch'}`
-    return insertionId.value === 'start' ? 'Insert at sequence start' : 'Append to sequence · select a node or branch to insert there'
+    return insertionId.value === 'start' ? 'Insert at sequence start' : 'Append to sequence Â· select a node or branch to insert there'
   })
 
   function fit (): void {

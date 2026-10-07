@@ -67,7 +67,7 @@
           :summary="`${node.process?.parameters.length ?? 0} parameters`"
           title="Process inputs"
         >
-          <PlanParameters v-if="node.process" :process="node.process" />
+          <PlanParameters v-if="node.process" :process="node.process" :material-scopes="materialScopes" />
         </InspectorSection>
 
         <PlanCapabilities v-model="node" :inherited="inheritedRequirements" :resources="resources" />
@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-  import type { PlanNode, PlanProcess } from '../types/plan'
+  import type { PlanNode, PlanProcess, PlanScope } from '../types/plan'
   import { newBranch } from '../utils/plan'
   import InspectorSection from './InspectorSection.vue'
   import PlanBindings from './PlanBindings.vue'
@@ -119,6 +119,7 @@
   import PlanParameters from './PlanParameters.vue'
 
   const props = defineProps<{
+    materialScopes: PlanScope[]
     processes: PlanProcess[]
     targets: { id: string, name: string }[]
     resources: { id: string, name: string }[]

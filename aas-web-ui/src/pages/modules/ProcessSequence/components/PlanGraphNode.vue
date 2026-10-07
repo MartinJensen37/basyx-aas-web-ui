@@ -1,5 +1,7 @@
 <template>
   <div class="plan-graph-node" :class="[`plan-graph-node--${data.kind}`, { 'plan-graph-node--selected': active }]" :style="{ height: `${data.height ?? graphNodeHeight[data.kind]}px` }" @click.capture="node && emit('select')">
+    <Handle v-if="data.hasMaterials" id="material-in" :position="Position.Left" type="target" />
+    <Handle v-if="data.hasMaterials" id="material-out" :position="Position.Right" type="source" />
     <Handle v-if="data.kind !== 'start'" id="flow-in" :position="Position.Top" type="target" />
 
     <div v-if="node" class="node-choices d-flex flex-wrap align-center ga-1 px-2 pt-2 nodrag nopan nowheel">
@@ -66,8 +68,8 @@
   const emit = defineEmits<{ 'select': [], 'open': [id: string], 'change-type': [kind: PlanNode['kind']], 'use-output': [outputId: string] }>()
   const node = defineModel<PlanNode>('node')
   const compact = computed(() => ['start', 'end', 'branch', 'join', 'skip', 'merge'].includes(props.data.kind))
-  const category = computed(() => ({ step: 'Process', call: 'Subprocess', parallel: 'Parallel split', decision: 'Decision', conditional: 'Optional flow', merge: 'Selected path', skip: 'Skip', join: 'Parallel join', branch: 'Branch', start: 'Sequence', end: 'Sequence' })[props.data.kind])
-  const icon = computed(() => ({ step: 'mdi-cog-outline', call: 'mdi-file-tree-outline', parallel: 'mdi-call-split', decision: 'mdi-help-rhombus-outline', conditional: 'mdi-directions-fork', merge: 'mdi-call-merge', skip: 'mdi-debug-step-over', join: 'mdi-call-merge', branch: 'mdi-source-branch', start: 'mdi-play-outline', end: 'mdi-check' })[props.data.kind])
+  const category = computed(() => ({ material: 'Material', step: 'Process', call: 'Subprocess', parallel: 'Parallel split', decision: 'Decision', conditional: 'Optional flow', merge: 'Selected path', skip: 'Skip', join: 'Parallel join', branch: 'Branch', start: 'Sequence', end: 'Sequence' })[props.data.kind])
+  const icon = computed(() => ({ material: 'mdi-package-variant-closed', step: 'mdi-cog-outline', call: 'mdi-file-tree-outline', parallel: 'mdi-call-split', decision: 'mdi-help-rhombus-outline', conditional: 'mdi-directions-fork', merge: 'mdi-call-merge', skip: 'mdi-debug-step-over', join: 'mdi-call-merge', branch: 'mdi-source-branch', start: 'mdi-play-outline', end: 'mdi-check' })[props.data.kind])
 </script>
 
 <style scoped>
