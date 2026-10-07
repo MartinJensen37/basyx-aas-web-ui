@@ -1,3 +1,4 @@
+import { materialUse } from '../utils/materials.ts'
 import type { PlanNode, PlanProcess, ProcessPlan, StepNode } from '../types/plan.ts'
 import { readPlanProcesses } from '../utils/planSources.ts'
 import { buildSequenceDocuments } from '../utils/sequenceDocuments.ts'
@@ -24,7 +25,7 @@ export const PHARMA_RECIPES: Recipe[] = [
   { id: 'vial-2ml-sampled', name: 'Vial 2 mL - inspection every 5', format: 'vial', volume: [2], diameter: 16, stopper: 13, accuracy: 0.1, inspectionEvery: 5 },
   { id: 'vial-10ml', name: 'Vial 10 mL', format: 'vial', volume: [10], diameter: 24, stopper: 20, accuracy: 0.1 },
   { id: 'syringe-1ml', name: 'Prefilled syringe 1 mL', format: 'syringe', volume: [1], diameter: 8.15, stopper: 6.35, accuracy: 0.01 },
-  { id: 'syringe-two-dose', name: 'Prefilled syringe — two doses', format: 'syringe', volume: [0.5, 0.5], diameter: 10.85, stopper: 8.65, accuracy: 0.01 },
+  { id: 'syringe-two-dose', name: 'Prefilled syringe  two doses', format: 'syringe', volume: [0.5, 0.5], diameter: 10.85, stopper: 8.65, accuracy: 0.01 },
   { id: 'cartridge-3ml', name: 'Cartridge 3 mL', format: 'cartridge', volume: [3], diameter: 11.6, stopper: 10.3, accuracy: 0.05 },
   { id: 'cartridge-5ml', name: 'Cartridge 5 mL', format: 'cartridge', volume: [5], diameter: 14, stopper: 12.3, accuracy: 0.05 },
 ]
@@ -43,7 +44,7 @@ function unitDefinition (name: string, unit?: string) {
 
 function capability (owner: string, name: string, operation: string, role: 'Required' | 'Offered', limits: Limit[]) {
   return collection(name, [
-    { modelType: 'Capability', idShort: 'Capability', displayName: [{ language: 'en', text: `${operation} — ${name}` }], semanticId: sem(cap('Capability')),
+    { modelType: 'Capability', idShort: 'Capability', displayName: [{ language: 'en', text: `${operation} â€” ${name}` }], semanticId: sem(cap('Capability')),
       supplementalSemanticIds: [sem(meaning(operation))], qualifiers: [{ type: role, kind: 'ValueQualifier', valueType: 'xs:boolean', value: 'true', semanticId: sem(cap(`CapabilityRoleQualifier/${role}`)) }] },
     collection('Properties', limits.map(limit => collection(limit.name, [{
       ...(limit.value === undefined
@@ -136,7 +137,7 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
       const operation = id.split('_', 1)[0]
       const cycle = Number(id.split('_', 2)[1] ?? 1)
       const manual = operation === 'Unpacking' || operation === 'Packing'
-      const name = recipe.volume.length > 1 && ['Filling', 'Stoppering'].includes(operation) ? `${operation} — dose ${cycle}` : operation
+      const name = recipe.volume.length > 1 && ['Filling', 'Stoppering'].includes(operation) ? `${operation} â€” dose ${cycle}` : operation
       const limits: Limit[] = [{ name: 'ContainerType', value: recipe.format }, { name: 'GraspDiameter', value: recipe.diameter, unit: 'mm' }]
       if (operation === 'Filling') {
         limits.push({ name: 'FillVolume', value: recipe.volume[cycle - 1], unit: 'mL' }, { name: 'AbsoluteFillError', min: 0, max: recipe.accuracy, unit: 'mL' })
@@ -158,6 +159,7 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
       parameters.push(...[{ name: 'Cycle', value: String(cycle), dataType: 'xs:double' }, { name: 'RecipeNote', value: 'Illustrative values; editable engineering demo', dataType: 'xs:string' }].map(parameter => ({ ...parameter, group: 'ProcessParameters' as const, source: { ...source, path: [...source.path, 'ProcessParameters', parameter.name] } })))
       const requiredCapabilities = manual ? [] : [{ name, reference: capRef(recipe.id, id) }]
       const relevant = parts.filter(part => {
+        if (part.id.endsWith('-container')) return true
         if (operation === 'Filling') {
           return part.id === `demo-liquid-${cycle}`
         }
@@ -167,9 +169,15 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
         if (operation === 'Capping') {
           return part.id.startsWith('cap-')
         }
-        return part.id.endsWith('-container') || (manual && part.id === 'packing-tray')
+        return operation === 'Packing' && part.id === 'packing-tray'
       })
-      const material = relevant.map((part, index) => reference(`Material_${index}`, modelRef([{ type: 'Submodel', value: bomId }, { type: 'Entity', value: 'Product' }, { type: 'Entity', value: `Part_${parts.indexOf(part)}` }])))
+      const material = relevant.map((part, index) => materialUse(`Material_${index}`, part.name,
+        modelRef([{ type: 'Submodel', value: bomId }, { type: 'Entity', value: 'Product' }, { type: 'Entity', value: `Part_${parts.indexOf(part)}` }]),
+        part.id.endsWith('-container') ? 'workpiece' : 'incorporated',
+        part.id.startsWith('demo-liquid') ? { reference: modelRef([{ type: 'Submodel', value: source.submodelId }, ...[...source.path, 'ProductParameters', 'FillVolume'].map(value => ({ type: 'SubmodelElement', value }))]) } : { value: 1, unit: 'piece' }))
+      if (operation === 'Packing') {
+        material.push(materialUse('FinishedProduct', recipe.name, modelRef([{ type: 'Submodel', value: bomId }, { type: 'Entity', value: 'Product' }]), 'output', { value: 1, unit: 'piece' }))
+      }
       const process: PlanProcess = { processId: id, name, source, parameters, material, requiredCapabilities }
       processes.push(collection(`Process_${index}`, [property('ProcessId', id, pp('ProcessId')), property('ProcessName', name, pp('ProcessName')),
         { modelType: 'MultiLanguageProperty', idShort: 'ProcessDescription', semanticId: sem(pp('ProcessDescription')), value: [{ language: 'en', text: `${name} for ${recipe.name}. Illustrative engineering recipe.` }] },

@@ -1,6 +1,8 @@
-import type { PlanNode } from '../types/plan'
+import type { PlanNode, PlanScope } from '../types/plan'
 import type { Edge, Node } from '@vue-flow/core'
 import { MarkerType } from '@vue-flow/core'
+import type { MaterialUse } from './materials'
+import { materialRoles, readMaterialUses } from './materials'
 import { conditionLabel, conditionOptions } from './conditions'
 import { flattenNodes } from './plan'
 
@@ -8,15 +10,18 @@ export interface PlanGraphData {
   title: string
   subtitle: string
   details?: string
-  kind: PlanNode['kind'] | 'start' | 'end' | 'join' | 'branch' | 'skip' | 'merge'
+  kind: PlanNode['kind'] | 'start' | 'end' | 'join' | 'branch' | 'skip' | 'merge' | 'material'
   planId?: string
   branchId?: string
   scopeId?: string
+  material?: MaterialUse
+  operationName?: string
+  hasMaterials?: boolean
   height?: number
 }
 
 export const graphNodeHeight: Record<PlanGraphData['kind'], number> = {
-  step: 132, call: 160, parallel: 96, conditional: 164, decision: 164, branch: 56, join: 56, skip: 56, merge: 56, start: 48, end: 48,
+  material: 72, step: 132, call: 160, parallel: 96, conditional: 164, decision: 164, branch: 56, join: 56, skip: 56, merge: 56, start: 48, end: 48,
 }
 
 export const conditionalLaneId = (id: string) => `conditional-run:${id}`
@@ -51,11 +56,12 @@ export function findLane (nodes: PlanNode[], id: string): { nodes: PlanNode[], i
 }
 
 /** A projection only: positions and presentation nodes never enter the saved plan. */
-export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, name: string }[], selectedId = ''): { nodes: Node<PlanGraphData>[], edges: Edge[] } {
+export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, name: string }[], selectedId = '', scopes: PlanScope[] = [], showMaterials = true): { nodes: Node<PlanGraphData>[], edges: Edge[] } {
   const nodes: Node<PlanGraphData>[] = []
   const edges: Edge[] = []
   const options = conditionOptions(flattenNodes(sequence))
-  const column = 280
+  const uses = new Map(flattenNodes(sequence).filter(node => node.kind === 'step' && node.process).map(node => [node.id, showMaterials ? readMaterialUses(node.process!, scopes) : []]))
+  const column = [...uses.values()].some(items => items.length > 0) ? 800 : 280
   const gap = 32
   const width = (lane: PlanNode[]): number => Math.max(1, ...lane.map(node => {
     if (node.kind === 'conditional') {
@@ -65,7 +71,7 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
   }))
 
   function add (id: string, x: number, y: number, data: PlanGraphData): string {
-    nodes.push({ id, type: 'plan', position: { x: x * column, y }, data })
+    nodes.push({ id, type: data.kind === 'material' ? 'material' : 'plan', position: { x: x * column, y }, data })
     return id
   }
 
@@ -97,15 +103,34 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
         }
         // No default
       }
-      const height = graphNodeHeight[node.kind] + (node.kind === 'step' && node.outputs?.length ? 24 + 28 * node.outputs.length : 0)
+      const materials = uses.get(node.id) ?? []
+      const inputs = materials.filter(material => material.role !== 'output')
+      const outputs = materials.filter(material => material.role === 'output')
+      const height = Math.max(graphNodeHeight[node.kind] + (node.kind === 'step' && node.outputs?.length ? 24 + 28 * node.outputs.length : 0), Math.max(inputs.length, outputs.length) * 84 - 12)
       const id = add(`node:${node.id}`, x, y, {
         title: node.name, kind: node.kind, planId: node.id,
-        height,
+        height, hasMaterials: materials.length > 0,
         scopeId: node.kind === 'call' ? node.scopeId : undefined,
         details: node.kind === 'decision' || node.kind === 'conditional' ? conditionLabel(node.condition, options) : undefined,
         subtitle,
       })
       connect(last, id)
+      for (const [side, items] of [inputs, outputs].entries()) {
+        for (const [index, material] of items.entries()) {
+          const output = side === 1
+          const materialId = add(`material:${node.id}:${material.id}`, x + (output ? 280 : -248) / column, y + index * 84, {
+            kind: 'material', title: material.name, subtitle: materialRoles[material.role], material, operationName: node.name, planId: node.id,
+          })
+          const incoming = material.role === 'incorporated' || material.role === 'consumable'
+          edges.push({
+            id: `material-edge:${node.id}:${material.id}`, source: output ? id : materialId, target: output ? materialId : id,
+            sourceHandle: output ? 'material-out' : 'material-source', targetHandle: output ? 'material-target' : 'material-in', type: 'smoothstep',
+            ariaLabel: `${materialRoles[material.role]}: ${material.name} ${output ? 'from' : 'at'} ${node.name}`,
+            data: { kind: 'material' }, markerEnd: incoming || output ? MarkerType.ArrowClosed : undefined,
+            style: { stroke: incoming || output ? '#00897b' : '#78909c', strokeWidth: 2, strokeDasharray: '3 5' },
+          })
+        }
+      }
       y += height + gap
       if (node.kind !== 'step' && node.kind !== 'call') {
         const branches = (node.kind === 'parallel' || node.kind === 'decision')

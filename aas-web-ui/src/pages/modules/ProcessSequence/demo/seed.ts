@@ -1,3 +1,4 @@
+import { materialSemantic, upgradeMaterialUses } from '../utils/materials.ts'
 import type { PlanProcess, PlanScope, ProcessPlan, StepNode } from '../types/plan.ts'
 import { Buffer } from 'node:buffer'
 import { readPlanProcesses } from '../utils/planSources.ts'
@@ -257,6 +258,10 @@ export function upgradeDemoInputs (existing: Record<string, any>, template: Reco
   const semanticKey = (value: Record<string, any> | undefined) => JSON.stringify([value?.type, value?.keys?.map((key: Record<string, string>) => [key.type, key.value])])
   if (template.semanticId && semanticKey(existing.semanticId) !== semanticKey(template.semanticId)) {
     existing.semanticId = template.semanticId
+  }
+  if (template.idShort === 'ProcessBoM' && template.value?.some((item: Record<string, any>) => item.semanticId?.keys?.[0]?.value === materialSemantic('MaterialUse'))) {
+    upgradeMaterialUses(existing, template)
+    return
   }
   const key = Array.isArray(template.submodelElements) ? 'submodelElements' : 'value'
   if (!Array.isArray(template[key])) {
