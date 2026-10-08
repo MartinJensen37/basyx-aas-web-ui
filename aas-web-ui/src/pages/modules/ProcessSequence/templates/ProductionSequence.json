@@ -373,7 +373,7 @@
                         ]
                       },
                       "valueType": "xs:string",
-                      "value": "measured-volume",
+                      "value": "measured-weight",
                       "qualifiers": [
                         {
                           "type": "SMT/Cardinality",
@@ -405,7 +405,7 @@
                         ]
                       },
                       "valueType": "xs:string",
-                      "value": "Measured volume",
+                      "value": "Measured weight",
                       "qualifiers": [
                         {
                           "type": "SMT/Cardinality",
@@ -469,13 +469,72 @@
                         ]
                       },
                       "valueType": "xs:string",
-                      "value": "mL",
+                      "value": "g",
                       "qualifiers": [
                         {
                           "type": "SMT/Cardinality",
                           "kind": "TemplateQualifier",
                           "valueType": "xs:string",
                           "value": "One",
+                          "semanticId": {
+                            "type": "ExternalReference",
+                            "keys": [
+                              {
+                                "type": "GlobalReference",
+                                "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "modelType": "ReferenceElement",
+                      "idShort": "ResultReference",
+                      "semanticId": {
+                        "type": "ExternalReference",
+                        "keys": [
+                          {
+                            "type": "GlobalReference",
+                            "value": "https://smartproductionlab.aau.dk/ProductionSequence/ResultReference/1/0"
+                          }
+                        ]
+                      },
+                      "value": {
+                        "type": "ModelReference",
+                        "keys": [
+                          {
+                            "type": "Submodel",
+                            "value": "https://smartproductionlab.aau.dk/aas/FillingModuleAAS/submodels/Skills"
+                          },
+                          {
+                            "type": "SubmodelElementCollection",
+                            "value": "Skills"
+                          },
+                          {
+                            "type": "SubmodelElementCollection",
+                            "value": "Dispensing"
+                          },
+                          {
+                            "type": "SubmodelElementCollection",
+                            "value": "Start"
+                          },
+                          {
+                            "type": "Operation",
+                            "value": "Start"
+                          },
+                          {
+                            "type": "Property",
+                            "value": "Weight"
+                          }
+                        ]
+                      },
+                      "qualifiers": [
+                        {
+                          "type": "SMT/Cardinality",
+                          "kind": "TemplateQualifier",
+                          "valueType": "xs:string",
+                          "value": "ZeroToOne",
                           "semanticId": {
                             "type": "ExternalReference",
                             "keys": [
@@ -844,7 +903,7 @@
                 "keys": [
                   {
                     "type": "AssetAdministrationShell",
-                    "value": "https://smartproductionlab.aau.dk/demo/pharma/aas/filling-station"
+                    "value": "https://smartproductionlab.aau.dk/aas/FillingModuleAAS"
                   }
                 ]
               },
@@ -883,11 +942,15 @@
                 "keys": [
                   {
                     "type": "Submodel",
-                    "value": "https://smartproductionlab.aau.dk/demo/pharma/sm/filling-station/skills"
+                    "value": "https://smartproductionlab.aau.dk/aas/FillingModuleAAS/submodels/Skills"
                   },
                   {
                     "type": "SubmodelElementCollection",
-                    "value": "Filling_vial"
+                    "value": "Skills"
+                  },
+                  {
+                    "type": "SubmodelElementCollection",
+                    "value": "Dispensing"
                   }
                 ]
               },
@@ -980,323 +1043,7 @@
                         ]
                       },
                       "valueType": "xs:string",
-                      "value": "ContainerType",
-                      "qualifiers": [
-                        {
-                          "type": "SMT/Cardinality",
-                          "kind": "TemplateQualifier",
-                          "valueType": "xs:string",
-                          "value": "One",
-                          "semanticId": {
-                            "type": "ExternalReference",
-                            "keys": [
-                              {
-                                "type": "GlobalReference",
-                                "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
-                              }
-                            ]
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "modelType": "ReferenceElement",
-                      "idShort": "SourceAas",
-                      "semanticId": {
-                        "type": "ExternalReference",
-                        "keys": [
-                          {
-                            "type": "GlobalReference",
-                            "value": "https://smartproductionlab.aau.dk/ProductionSequence/SourceAas/1/0"
-                          }
-                        ]
-                      },
-                      "value": {
-                        "type": "ModelReference",
-                        "keys": [
-                          {
-                            "type": "AssetAdministrationShell",
-                            "value": "https://smartproductionlab.aau.dk/demo/pharma/aas/vial-2ml"
-                          }
-                        ]
-                      },
-                      "qualifiers": [
-                        {
-                          "type": "SMT/Cardinality",
-                          "kind": "TemplateQualifier",
-                          "valueType": "xs:string",
-                          "value": "ZeroToOne",
-                          "semanticId": {
-                            "type": "ExternalReference",
-                            "keys": [
-                              {
-                                "type": "GlobalReference",
-                                "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
-                              }
-                            ]
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "modelType": "ReferenceElement",
-                      "idShort": "SourceElement",
-                      "semanticId": {
-                        "type": "ExternalReference",
-                        "keys": [
-                          {
-                            "type": "GlobalReference",
-                            "value": "https://smartproductionlab.aau.dk/ProductionSequence/SourceElement/1/0"
-                          }
-                        ]
-                      },
-                      "value": {
-                        "type": "ModelReference",
-                        "keys": [
-                          {
-                            "type": "Submodel",
-                            "value": "https://smartproductionlab.aau.dk/demo/pharma/sm/vial-2ml/parameters"
-                          },
-                          {
-                            "type": "SubmodelElement",
-                            "value": "Processes"
-                          },
-                          {
-                            "type": "SubmodelElement",
-                            "value": "Process_2"
-                          },
-                          {
-                            "type": "SubmodelElement",
-                            "value": "ProductParameters"
-                          },
-                          {
-                            "type": "SubmodelElement",
-                            "value": "ContainerType"
-                          }
-                        ]
-                      },
-                      "qualifiers": [
-                        {
-                          "type": "SMT/Cardinality",
-                          "kind": "TemplateQualifier",
-                          "valueType": "xs:string",
-                          "value": "ZeroToOne",
-                          "semanticId": {
-                            "type": "ExternalReference",
-                            "keys": [
-                              {
-                                "type": "GlobalReference",
-                                "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
-                              }
-                            ]
-                          }
-                        }
-                      ]
-                    }
-                  ],
-                  "qualifiers": [
-                    {
-                      "type": "SMT/Cardinality",
-                      "kind": "TemplateQualifier",
-                      "valueType": "xs:string",
-                      "value": "ZeroToMany",
-                      "semanticId": {
-                        "type": "ExternalReference",
-                        "keys": [
-                          {
-                            "type": "GlobalReference",
-                            "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "modelType": "SubmodelElementCollection",
-                  "idShort": "Binding_0001",
-                  "semanticId": {
-                    "type": "ExternalReference",
-                    "keys": [
-                      {
-                        "type": "GlobalReference",
-                        "value": "https://smartproductionlab.aau.dk/ProductionSequence/Binding/1/0"
-                      }
-                    ]
-                  },
-                  "value": [
-                    {
-                      "modelType": "Property",
-                      "idShort": "Name",
-                      "semanticId": {
-                        "type": "ExternalReference",
-                        "keys": [
-                          {
-                            "type": "GlobalReference",
-                            "value": "https://smartproductionlab.aau.dk/ProductionSequence/Name/1/0"
-                          }
-                        ]
-                      },
-                      "valueType": "xs:string",
-                      "value": "GraspDiameter",
-                      "qualifiers": [
-                        {
-                          "type": "SMT/Cardinality",
-                          "kind": "TemplateQualifier",
-                          "valueType": "xs:string",
-                          "value": "One",
-                          "semanticId": {
-                            "type": "ExternalReference",
-                            "keys": [
-                              {
-                                "type": "GlobalReference",
-                                "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
-                              }
-                            ]
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "modelType": "ReferenceElement",
-                      "idShort": "SourceAas",
-                      "semanticId": {
-                        "type": "ExternalReference",
-                        "keys": [
-                          {
-                            "type": "GlobalReference",
-                            "value": "https://smartproductionlab.aau.dk/ProductionSequence/SourceAas/1/0"
-                          }
-                        ]
-                      },
-                      "value": {
-                        "type": "ModelReference",
-                        "keys": [
-                          {
-                            "type": "AssetAdministrationShell",
-                            "value": "https://smartproductionlab.aau.dk/demo/pharma/aas/vial-2ml"
-                          }
-                        ]
-                      },
-                      "qualifiers": [
-                        {
-                          "type": "SMT/Cardinality",
-                          "kind": "TemplateQualifier",
-                          "valueType": "xs:string",
-                          "value": "ZeroToOne",
-                          "semanticId": {
-                            "type": "ExternalReference",
-                            "keys": [
-                              {
-                                "type": "GlobalReference",
-                                "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
-                              }
-                            ]
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "modelType": "ReferenceElement",
-                      "idShort": "SourceElement",
-                      "semanticId": {
-                        "type": "ExternalReference",
-                        "keys": [
-                          {
-                            "type": "GlobalReference",
-                            "value": "https://smartproductionlab.aau.dk/ProductionSequence/SourceElement/1/0"
-                          }
-                        ]
-                      },
-                      "value": {
-                        "type": "ModelReference",
-                        "keys": [
-                          {
-                            "type": "Submodel",
-                            "value": "https://smartproductionlab.aau.dk/demo/pharma/sm/vial-2ml/parameters"
-                          },
-                          {
-                            "type": "SubmodelElement",
-                            "value": "Processes"
-                          },
-                          {
-                            "type": "SubmodelElement",
-                            "value": "Process_2"
-                          },
-                          {
-                            "type": "SubmodelElement",
-                            "value": "ProductParameters"
-                          },
-                          {
-                            "type": "SubmodelElement",
-                            "value": "GraspDiameter"
-                          }
-                        ]
-                      },
-                      "qualifiers": [
-                        {
-                          "type": "SMT/Cardinality",
-                          "kind": "TemplateQualifier",
-                          "valueType": "xs:string",
-                          "value": "ZeroToOne",
-                          "semanticId": {
-                            "type": "ExternalReference",
-                            "keys": [
-                              {
-                                "type": "GlobalReference",
-                                "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
-                              }
-                            ]
-                          }
-                        }
-                      ]
-                    }
-                  ],
-                  "qualifiers": [
-                    {
-                      "type": "SMT/Cardinality",
-                      "kind": "TemplateQualifier",
-                      "valueType": "xs:string",
-                      "value": "ZeroToMany",
-                      "semanticId": {
-                        "type": "ExternalReference",
-                        "keys": [
-                          {
-                            "type": "GlobalReference",
-                            "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "modelType": "SubmodelElementCollection",
-                  "idShort": "Binding_0002",
-                  "semanticId": {
-                    "type": "ExternalReference",
-                    "keys": [
-                      {
-                        "type": "GlobalReference",
-                        "value": "https://smartproductionlab.aau.dk/ProductionSequence/Binding/1/0"
-                      }
-                    ]
-                  },
-                  "value": [
-                    {
-                      "modelType": "Property",
-                      "idShort": "Name",
-                      "semanticId": {
-                        "type": "ExternalReference",
-                        "keys": [
-                          {
-                            "type": "GlobalReference",
-                            "value": "https://smartproductionlab.aau.dk/ProductionSequence/Name/1/0"
-                          }
-                        ]
-                      },
-                      "valueType": "xs:string",
-                      "value": "FillVolume",
+                      "value": "Volume",
                       "qualifiers": [
                         {
                           "type": "SMT/Cardinality",
@@ -1388,6 +1135,65 @@
                           {
                             "type": "SubmodelElement",
                             "value": "FillVolume"
+                          }
+                        ]
+                      },
+                      "qualifiers": [
+                        {
+                          "type": "SMT/Cardinality",
+                          "kind": "TemplateQualifier",
+                          "valueType": "xs:string",
+                          "value": "ZeroToOne",
+                          "semanticId": {
+                            "type": "ExternalReference",
+                            "keys": [
+                              {
+                                "type": "GlobalReference",
+                                "value": "https://admin-shell.io/SubmodelTemplates/Cardinality/1/0"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "modelType": "ReferenceElement",
+                      "idShort": "InputReference",
+                      "semanticId": {
+                        "type": "ExternalReference",
+                        "keys": [
+                          {
+                            "type": "GlobalReference",
+                            "value": "https://smartproductionlab.aau.dk/ProductionSequence/InputReference/1/0"
+                          }
+                        ]
+                      },
+                      "value": {
+                        "type": "ModelReference",
+                        "keys": [
+                          {
+                            "type": "Submodel",
+                            "value": "https://smartproductionlab.aau.dk/aas/FillingModuleAAS/submodels/Skills"
+                          },
+                          {
+                            "type": "SubmodelElementCollection",
+                            "value": "Skills"
+                          },
+                          {
+                            "type": "SubmodelElementCollection",
+                            "value": "Dispensing"
+                          },
+                          {
+                            "type": "SubmodelElementCollection",
+                            "value": "Start"
+                          },
+                          {
+                            "type": "Operation",
+                            "value": "Start"
+                          },
+                          {
+                            "type": "Property",
+                            "value": "Volume"
                           }
                         ]
                       },
@@ -1556,7 +1362,7 @@
                 ]
               },
               "valueType": "xs:string",
-              "value": "Volume decision",
+              "value": "Weight decision",
               "qualifiers": [
                 {
                   "type": "SMT/Cardinality",
@@ -1697,7 +1503,7 @@
                     ]
                   },
                   "valueType": "xs:string",
-                  "value": "mL",
+                  "value": "g",
                   "qualifiers": [
                     {
                       "type": "SMT/Cardinality",
@@ -1902,7 +1708,7 @@
                         ]
                       },
                       "valueType": "xs:string",
-                      "value": "measured-volume",
+                      "value": "measured-weight",
                       "qualifiers": [
                         {
                           "type": "SMT/Cardinality",

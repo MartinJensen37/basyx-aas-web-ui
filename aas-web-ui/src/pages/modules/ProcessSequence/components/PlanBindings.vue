@@ -60,6 +60,7 @@
   import type { SkillDefinition } from '../types'
   import type { PlanBinding, StepNode } from '../types/plan'
   import { usePlanSources } from '../composables/usePlanSources'
+  import { assignSkill, clearSkill } from '../utils/skillAssignment'
 
   defineProps<{ resources: { id: string, name: string }[] }>()
   const node = defineModel<StepNode>({ required: true })
@@ -103,18 +104,13 @@
 
   function resetResource (): void {
     node.value.resourceAasId ||= ''
-    node.value.skillId = ''
-    delete node.value.skillReference
-    node.value.bindings = []
+    clearSkill(node.value)
   }
 
   function bindSkill (key: string): void {
     const skill = skillOptions.value.find(skill => skill.key === key)
-    node.value.skillId = skill?.idShort ?? ''
-    node.value.skillReference = skill?.reference
-    node.value.bindings = (skill?.parameters ?? []).map(parameter => ({
-      name: parameter.idShort, source: null, value: String(parameter.defaultValue ?? ''),
-    }))
+    if (skill) assignSkill(node.value, skill)
+    else clearSkill(node.value)
   }
 
   function setSource (binding: PlanBinding, value: string): void {

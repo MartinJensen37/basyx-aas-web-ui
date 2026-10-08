@@ -39,7 +39,7 @@ There are no persisted Scopes, ParentScope or RootScope fields. The editor still
 | ParameterOverride | ParameterReference, Value, DataType; optional Unit |
 | Component | SourceElement (BoM occurrence), GlobalAssetId; SourceAas only when different from Subject |
 | RequiredCapabilities | Zero or more RequiredCapability references with display names |
-| Bindings | Zero or more Binding collections with Name and either constant Value or SourceElement; SourceAas only when different from Subject |
+| Bindings | Zero or more Binding collections with Name and either constant Value or SourceElement; SourceAas only when different from Subject; optional InputReference to the target operation variable |
 
 A new plan contains only root metadata and empty Steps. Draft operations may have no selected process. Local SequenceId values must be unique within an owner; NodeId values must be unique within a definition including branches. Sequence submodel IDs remain stable when labels change. Order determines execution order independently of collection array order. Containment, ownership and call cycles are invalid. Missing definitions and incompatible overrides are errors, not empty replacement plans.
 
@@ -80,7 +80,7 @@ A decision has exactly two ordered branches: Order 0 is Yes and Order 1 is No. B
 | Expected | DataType=`boolean`, `number` or `string`; Value typed `xs:boolean`, `xs:double` or `xs:string` respectively |
 | Operand, OperandType=`parameter` | StepId and the SourceElement reference and optional SourceAas identifying an effective parameter in that operation |
 | Operand, OperandType=`output` | StepId and OutputId identifying an operation output within the same scope |
-| Operation Outputs | Zero or more Output collections containing OutputId, Name, DataType and Unit |
+| Operation Outputs | Zero or more Output collections containing OutputId, Name, DataType and Unit; optional ResultReference to the resource output variable |
 
 Operators are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`. Ordered comparisons require numbers. Missing or incompatible values, removed sources, invalid numbers and mismatched units remain unresolved; they never select No or Skip. Unit conversion is not implicit. Output IDs are unique within an operation, and node IDs remain unique within a scope. Semantic IDs use the existing application namespace with the field names above. Display-name changes do not change references.
 
@@ -137,3 +137,11 @@ Production Sequence documents or inferred as material overrides.
 Semantic IDs describe meaning using ExternalReference / GlobalReference; they do not locate instances. ModelReferences locate instances using a globally identified Submodel followed by each nested element's idShort and key type. Readers identify fields by semantic ID, so a renamed idShort works when reference paths are updated. Collections have unique idShort values. Steps and branches keep explicit Order because SubmodelElementCollection array order has no execution meaning. SequenceId and NodeId preserve editor identities independently of labels and collection placement. The AAS SDK verifies the generated structure; repository tests verify reference resolution and round trips. These checks do not make this project-owned contract a published IDTA template.
 
 See the [AAS metamodel's submodel element definitions](https://industrialdigitaltwin.io/aas-specifications/IDTA-01001/v3.1.2/spec-metamodel/submodel-elements.html).
+
+## Resource input and output references
+
+Production Sequence 3.0 supports two additive optional ReferenceElements using the existing application namespace: `InputReference/1/0` inside Binding and `ResultReference/1/0` inside Output. InputReference identifies a skill input independently of the binding's source Process Parameter. ResultReference identifies the resource result while OutputId remains the identity used by decisions. Both use ModelReference paths through the resource Skills submodel, skill collection, Start wrapper, Start Operation and Property variable. AAS OperationVariable wrappers do not add a reference-path segment.
+
+The ARSO adapter reads recipe variables and domain results from Start; execution-session and command-status variables are excluded. Missing or unbound result sources stay authored declarations. Reassigning a different skill clears result references while preserving output identities. Reference mapping alone does not execute a skill, establish completion timing, sample OperationalData, or convert measured weight to filled volume. Older bindings without InputReference and outputs without ResultReference remain readable.
+
+Parameter semantic IDs are loaded from the source definition and retained in the editor projection. The sequence still stores source references and overrides rather than copies of those meanings. Scalar capability requirements sharing an unambiguous parameter meaning use the effective parameter value; range requirements keep their independent bounds. A small explicit table maps the original pharma demo's capability/property meanings to the shared vocabulary for reading. It does not rename server models or relax physical capability limits.

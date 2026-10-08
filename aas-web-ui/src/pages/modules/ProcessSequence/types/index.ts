@@ -8,6 +8,8 @@ export type SkillParameter = {
   minValue: number | null
   maxValue: number | null
   defaultValue: string | null
+  semanticIds?: string[]
+  reference?: CapabilityReference
 }
 export type SkillDefinition = {
   idShort: string
@@ -15,6 +17,7 @@ export type SkillDefinition = {
   description: string
   capabilities: string[]
   parameters: SkillParameter[]
+  outputs?: SkillParameter[]
   reference?: CapabilityReference
 }
 export type SkillCatalog = {

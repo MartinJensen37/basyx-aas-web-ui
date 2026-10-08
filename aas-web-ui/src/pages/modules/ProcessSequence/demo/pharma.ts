@@ -2,6 +2,7 @@ import type { PlanNode, PlanProcess, ProcessPlan, StepNode } from '../types/plan
 import { HIERARCHICAL_STRUCTURES_SUBMODEL, PROCESS_PARAMETERS_SUBMODEL, PROCESS_STEP_CAPABILITY_SEMANTIC_ID, processParameterSemantic, SKILLS_SUBMODEL_SEMANTIC_ID, skillSemantic } from '../constants/contracts.ts'
 import { BULK_COUNT_SEMANTIC_ID, readBulkCount } from '../utils/bulkCount.ts'
 import { materialUse } from '../utils/materials.ts'
+import { canonicalMeaning } from '../utils/parameterSemantics.ts'
 import { readPlanProcesses } from '../utils/planSources.ts'
 import { buildSequenceDocuments } from '../utils/sequenceDocuments.ts'
 import { modelRef } from '../utils/sequenceModel.ts'
@@ -49,7 +50,7 @@ function unitDefinition (name: string, unit?: string) {
 function capability (owner: string, name: string, operation: string, role: 'Required' | 'Offered', limits: Limit[]) {
   return collection(name, [
     { modelType: 'Capability', idShort: 'Capability', displayName: [{ language: 'en', text: `${operation} — ${name}` }], semanticId: sem(cap('Capability')),
-      supplementalSemanticIds: [sem(meaning(operation))], qualifiers: [{ type: role, kind: 'ValueQualifier', valueType: 'xs:boolean', value: 'true', semanticId: sem(cap(`CapabilityRoleQualifier/${role}`)) }] },
+      supplementalSemanticIds: [sem(vocabulary(operation))], qualifiers: [{ type: role, kind: 'ValueQualifier', valueType: 'xs:boolean', value: 'true', semanticId: sem(cap(`CapabilityRoleQualifier/${role}`)) }] },
     collection('Properties', limits.map(limit => collection(limit.name, [{
       ...(limit.value === undefined
         ? { modelType: 'Range', idShort: 'Value', valueType: 'xs:double', min: String(limit.min), max: String(limit.max), semanticId: sem('https://admin-shell.io/idta/CapabilityPropertyEnumType/Range/1/0') }
@@ -160,8 +161,8 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
         capabilities.push(capability(recipe.id, id, operation, 'Required', limits))
       }
       const source = { aasId: aas(recipe.id), submodelId: sm(recipe.id, 'parameters'), path: ['Processes', `Process_${index}`] }
-      const parameters: PlanProcess['parameters'] = limits.filter(item => item.value !== undefined).map(item => ({ name: item.name, group: 'ProductParameters' as const, dataType: typeof item.value === 'number' ? 'xs:double' : 'xs:string', value: String(item.value), ...(item.unit ? { unit: item.unit } : {}), source: { ...source, path: [...source.path, 'ProductParameters', item.name] } }))
-      parameters.push(...[{ name: 'Cycle', value: String(cycle), dataType: 'xs:double' }, { name: 'RecipeNote', value: 'Illustrative values; editable engineering demo', dataType: 'xs:string' }].map(parameter => ({ ...parameter, group: 'ProcessParameters' as const, source: { ...source, path: [...source.path, 'ProcessParameters', parameter.name] } })))
+      const parameters: PlanProcess['parameters'] = limits.filter(item => item.value !== undefined).map(item => ({ name: item.name, semanticIds: [canonicalMeaning(meaning(item.name))], group: 'ProductParameters' as const, dataType: typeof item.value === 'number' ? 'xs:double' : 'xs:string', value: String(item.value), ...(item.unit ? { unit: item.unit } : {}), source: { ...source, path: [...source.path, 'ProductParameters', item.name] } }))
+      parameters.push(...[{ name: 'Cycle', value: String(cycle), dataType: 'xs:double' }, { name: 'RecipeNote', value: 'Illustrative values; editable engineering demo', dataType: 'xs:string' }].map(parameter => ({ ...parameter, semanticIds: [meaning(parameter.name)], group: 'ProcessParameters' as const, source: { ...source, path: [...source.path, 'ProcessParameters', parameter.name] } })))
       const requiredCapabilities = manual ? [] : [{ name, reference: capRef(recipe.id, id) }]
       const relevant = parts.filter(part => {
         if (part.id.endsWith('-container')) {

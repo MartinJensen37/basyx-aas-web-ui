@@ -1,4 +1,5 @@
 import type { PlanProcess, StepNode } from '../types/plan'
+import { clearSkill } from './skillAssignment'
 
 /** An operation choice changes the requirements; an old station assignment must be reconsidered. */
 export function setOperation (node: StepNode, process: PlanProcess | null): void {
@@ -12,8 +13,6 @@ export function setOperation (node: StepNode, process: PlanProcess | null): void
   }
   delete node.requiredCapabilities
   node.resourceAasId = ''
-  node.skillId = ''
-  delete node.skillReference
-  node.bindings = []
+  clearSkill(node)
   // Outputs are the authored step contract; retain identities used by downstream decisions.
 }

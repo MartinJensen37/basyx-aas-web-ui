@@ -52,6 +52,16 @@ The blue **Match resources** button in the Capabilities box opens a chooser for 
 
 Selection details show product, process and resource parameters as branches in a tree, alongside process materials. Process inputs, Capabilities and Resource assignment can each be collapsed without clearing their fields. The matching button stays accessible in the Capabilities header. Section help, parameter datatypes and capability reference paths are available in tooltips. Planning-check summaries are omitted from the panel; structural validation still runs when saving.
 
+## ARSO resource skills
+
+The resource adapter supports `https://smartproductionlab.aau.dk/ARSO/Skills/1/0/Submodel`, including CappingModuleAAS, FillingModuleAAS, InspectionModuleAAS and StopperingModuleAAS. CapabilityRealizedBy selects the skill collection. Recipe inputs come from its Start operation's inputVariables; domain results come from outputVariables. Session, Accepted and ErrorID belong to the control protocol and are excluded from recipe fields. Composite internals stay in the resource model. The older application Skills catalog remains supported.
+
+Both **Match resources** and manual skill selection bind inputs by unambiguous semantic meaning, compatible datatype and matching units. This binds the resource input Volume to the product's FillVolume despite different labels. The old catalog without semantic input identifiers retains exact-name matching. Unmatched inputs show their declared default as an editable constant. No unit conversion is inferred. New bindings store an InputReference to the actual operation variable as well as their source or constant value.
+
+Matching evaluates scalar capability requirements against effective process parameters with the same meaning, including sequence overrides. Ambiguous associations or incompatible types/units need verification. Range requirements remain independent tolerance constraints. The known historical pharma vocabulary has an explicit compatibility mapping; arbitrary namespaces are never equated by suffix. Existing server models are not rewritten. Vial-only offers still reject syringes/cartridges, and the declared accuracy limits still apply.
+
+After choosing a resource skill, expand **Operation outputs** and choose **Add skill results**. Use **Skill result** to map an existing output instead. Outputs such as TopPassed, SidePassed and Weight retain AAS ResultReference paths; their stable output IDs can be used in decisions. Mapped types and units come from the resource. Changing the resource/skill clears its mappings while preserving authored output IDs for review. This describes result wiring; previews still use entered values, and the module does not invoke equipment or collect live results. Weight in g is not converted into volume in mL.
+
 ## Persistence and integration
 
 Only this module, its tests and the example environment implement this feature. `index.vue` uses the existing module metadata/autodiscovery convention. The application router, stores, viewers and root build configuration are unchanged. The optional Docker dev optimizer is contained in `dev/vite.config.mts`.

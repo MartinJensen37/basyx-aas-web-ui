@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import { buildPharmaDemo } from '../demo/pharma.ts'
 import { buildSequenceDocuments } from '../utils/sequenceDocuments.ts'
-import { sequenceSemantic } from '../utils/sequenceModel.ts'
+import { modelRef, sequenceSemantic } from '../utils/sequenceModel.ts'
 
 // Concrete defaults demonstrate the conditional shapes. Instances start with an empty Steps collection.
 const plan = buildPharmaDemo(id => `${id}/sequence`).plans.find(plan => plan.productAasId.endsWith('/aas/vial-2ml'))!
@@ -12,13 +12,17 @@ plan.revision = 0
 plan.schema = 'process-sequence-plan/5.0'
 if (filling.kind === 'step' && filling.process) {
   filling.process.parameters.find(parameter => parameter.name === 'FillVolume')!.value = '1.8'
-  filling.outputs = [{ id: 'measured-volume', name: 'Measured volume', type: 'number', unit: 'mL' }]
+  filling.resourceAasId = 'https://smartproductionlab.aau.dk/aas/FillingModuleAAS'
+  filling.skillReference = modelRef([{ type: 'Submodel', value: `${filling.resourceAasId}/submodels/Skills` }, { type: 'SubmodelElementCollection', value: 'Skills' }, { type: 'SubmodelElementCollection', value: 'Dispensing' }])
+  const variable = (name: string) => modelRef([...filling.skillReference!.keys, { type: 'SubmodelElementCollection', value: 'Start' }, { type: 'Operation', value: 'Start' }, { type: 'Property', value: name }])
+  filling.bindings = [{ name: 'Volume', value: '', source: filling.process.parameters.find(parameter => parameter.name === 'FillVolume')!.source, target: variable('Volume') }]
+  filling.outputs = [{ id: 'measured-weight', name: 'Measured weight', type: 'number', unit: 'g', source: variable('Weight') }]
 }
 plan.scopes = [
   { id: 'product', name: 'Product', parentId: null, material: null, nodes: [
     filling,
-    { id: 'decision', kind: 'decision', name: 'Volume decision', condition: {
-      kind: 'comparison', operand: { kind: 'output', stepId: filling.id, outputId: 'measured-volume' }, operator: 'gte', expected: { type: 'number', value: 2 }, unit: 'mL',
+    { id: 'decision', kind: 'decision', name: 'Weight decision', condition: {
+      kind: 'comparison', operand: { kind: 'output', stepId: filling.id, outputId: 'measured-weight' }, operator: 'gte', expected: { type: 'number', value: 2 }, unit: 'g',
     }, branches: [{ id: 'yes', name: 'Yes', nodes: [] }, { id: 'no', name: 'No', nodes: [] }] },
     { id: 'optional', kind: 'conditional', name: 'Periodic inspection', condition: { kind: 'everyNthProduct', every: 5 }, nodes: [] },
     { id: 'call', kind: 'call', name: 'Subprocess', scopeId: 'subprocess' },
@@ -29,7 +33,7 @@ plan.scopes = [
   { id: 'subprocess', name: 'Subprocess', parentId: 'product', material: null, nodes: [] },
 ]
 const templates = buildSequenceDocuments(plan, 'https://smartproductionlab.aau.dk/templates/ProductionSequence/3/0', baseline ? [baseline] : [])
-const optional = new Set(['Component', 'LocalSubprocesses', 'Bindings', 'SkillId', 'ParameterOverrides', 'MaterialOverrides', 'ProcessOwner', 'ProcessReference', 'SequenceReference', 'OccurrenceId', 'RequiredCapabilities', 'Resource', 'Skill', 'ExecutionMode', 'SourceAas', 'SourceElement', 'Outputs', 'Operand'])
+const optional = new Set(['InputReference', 'ResultReference', 'Component', 'LocalSubprocesses', 'Bindings', 'SkillId', 'ParameterOverrides', 'MaterialOverrides', 'ProcessOwner', 'ProcessReference', 'SequenceReference', 'OccurrenceId', 'RequiredCapabilities', 'Resource', 'Skill', 'ExecutionMode', 'SourceAas', 'SourceElement', 'Outputs', 'Operand'])
 const repeatable = new Set(['SubprocessDefinition', 'Step', 'Branch', 'ParameterOverride', 'Binding', 'RequiredCapability', 'Output'])
 function annotate (element: Record<string, any>, parentMeaning = ''): void {
   const name = String(element.semanticId?.keys?.[0]?.value ?? '').replace('https://smartproductionlab.aau.dk/ProductionSequence/', '').replace('/1/0', '')

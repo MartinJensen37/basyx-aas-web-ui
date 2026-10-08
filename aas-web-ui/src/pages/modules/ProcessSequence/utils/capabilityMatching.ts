@@ -1,6 +1,7 @@
-import type { CapabilityRequirement } from '../types/plan'
+import type { CapabilityRequirement, PlanParameter } from '../types/plan'
 import type { CapabilityDescription } from './capabilities'
 import { capabilitySemantic } from '../constants/capabilities'
+import { canonicalMeaning, compatibleType, numericTypes } from './parameterSemantics'
 import { childrenOf, semanticId } from './planSources'
 
 export type CapabilityProperty = {
@@ -15,12 +16,11 @@ export type CapabilityProperty = {
 }
 export type CapabilityMatch = { aasId: string, status: 'match' | 'mismatch' | 'unknown', reasons: string[], capabilities: CapabilityDescription[] }
 const identity = (reference: CapabilityRequirement['reference']) => JSON.stringify([reference.type, reference.keys.map(key => [key.type, key.value])])
-const numericTypes = new Set(['xs:double', 'xs:float', 'xs:decimal', 'xs:integer', 'xs:int', 'xs:nonNegativeInteger', 'xs:positiveInteger'])
 
 export function readCapabilityProperties (container: Record<string, any>): CapabilityProperty[] {
   return childrenOf(container).filter(set => semanticId(set) === capabilitySemantic('PropertySet')).flatMap(set => childrenOf(set).filter(item => semanticId(item) === capabilitySemantic('PropertyContainer'))).flatMap(item => childrenOf(item).map(property => ({
-    name: property.displayName?.find((name: { language: string }) => name.language === 'en')?.text ?? property.idShort,
-    semanticId: property.supplementalSemanticIds?.[0]?.keys?.[0]?.value ?? '',
+    name: property.displayName?.find((name: { language: string }) => name.language === 'en')?.text ?? item.displayName?.find((name: { language: string }) => name.language === 'en')?.text ?? item.idShort ?? property.idShort,
+    semanticId: canonicalMeaning(property.supplementalSemanticIds?.[0]?.keys?.[0]?.value ?? ''),
     unit: property.embeddedDataSpecifications?.[0]?.dataSpecificationContent?.unit ?? '',
     dataType: property.valueType ?? '', kind: property.modelType === 'Range' ? 'range' as const : 'value' as const,
     value: String(property.value ?? ''), min: String(property.min ?? ''), max: String(property.max ?? ''),
@@ -76,7 +76,7 @@ function compareProperty (required: CapabilityProperty, offered?: CapabilityProp
 }
 
 /** Each required capability must be satisfied by one complete offered capability, including its properties. */
-export function matchCapabilities (requirements: CapabilityRequirement[], catalog: CapabilityDescription[]): CapabilityMatch[] {
+export function matchCapabilities (requirements: CapabilityRequirement[], catalog: CapabilityDescription[], parameters: PlanParameter[] = []): CapabilityMatch[] {
   if (requirements.length === 0) {
     return []
   }
@@ -91,13 +91,22 @@ export function matchCapabilities (requirements: CapabilityRequirement[], catalo
         reasons.push(`${requirement.name}: unresolved requirement`)
         return 'unknown'
       }
-      const candidates = offered.filter(item => item.aasId === aasId && item.semanticIds.some(id => meanings.includes(id)))
+      const candidates = offered.filter(item => item.aasId === aasId && item.semanticIds.some(id => meanings.some(meaning => canonicalMeaning(meaning) === canonicalMeaning(id))))
       if (candidates.length === 0) {
         reasons.push(`${requirement.name}: capability not offered`)
         return 'mismatch'
       }
       const checked = candidates.map(candidate => {
-        const checks = (required?.properties ?? []).map(property => compareProperty(property, candidate.properties.find(item => item.semanticId === property.semanticId)))
+        const checks = (required?.properties ?? []).map(property => {
+          // Scalar requirements with the same domain meaning follow effective recipe values.
+          // Ranges describe tolerances and must not be replaced by a process setpoint.
+          const sources = property.kind === 'value' ? parameters.filter(parameter => parameter.semanticIds?.some(id => canonicalMeaning(id) === canonicalMeaning(property.semanticId))) : []
+          if (sources.length > 1 || (sources.length === 1 && ((sources[0].unit ?? '') !== property.unit || !compatibleType(sources[0].dataType, property.dataType)))) {
+            return { status: 'unknown' as const, reason: `${property.name}: recipe association is ambiguous or has incompatible type/units` }
+          }
+          const effective = sources.length === 1 ? { ...property, value: sources[0].value } : property
+          return compareProperty(effective, candidate.properties.find(item => canonicalMeaning(item.semanticId) === canonicalMeaning(property.semanticId)))
+        })
         const unsupported = required?.hasConstraints || candidate.hasConstraints
         const status = checks.some(check => check.status === 'mismatch') ? 'mismatch' : (unsupported || checks.some(check => check.status === 'unknown') ? 'unknown' : 'match')
         return { candidate, status, reasons: [...checks.map(check => check.reason), ...(unsupported ? ['Additional constraints need evaluation'] : [])] }

@@ -67,6 +67,7 @@
   import { usePlanSources } from '../composables/usePlanSources'
   import { referenceKey } from '../utils/capabilities'
   import { matchCapabilities } from '../utils/capabilityMatching'
+  import { assignSkill } from '../utils/skillAssignment'
   import InspectorSection from './InspectorSection.vue'
   import PlanResourceMatches from './PlanResourceMatches.vue'
 
@@ -81,7 +82,7 @@
   const showMatches = ref(false)
   let generation = 0
   const requirements = computed(() => node.value.requiredCapabilities ?? props.inherited)
-  const matches = computed(() => matchCapabilities(requirements.value, catalog.value))
+  const matches = computed(() => matchCapabilities(requirements.value, catalog.value, node.value.process?.parameters))
   const owners = computed(() => [...new Set([String(aasStore.getSelectedAAS?.id ?? ''), node.value.process?.source.aasId ?? '', ...props.resources.map(resource => resource.id)])].filter(Boolean))
   const options = computed(() => {
     const selected = new Map(requirements.value.map(item => [referenceKey(item.reference), item]))
@@ -117,13 +118,8 @@
         return
       }
       node.value.resourceAasId = match.aasId
-      node.value.skillId = skill.idShort
-      node.value.skillReference = skill.reference
+      assignSkill(node.value, skill)
       node.value.executionMode = 'station'
-      node.value.bindings = skill.parameters.map(parameter => {
-        const source = node.value.process?.parameters.find(item => item.name === parameter.name || item.name === parameter.idShort)
-        return { name: parameter.idShort, value: source ? '' : String(parameter.defaultValue ?? ''), source: source?.source ?? null }
-      })
       showMatches.value = false
     } catch {
       error.value = 'The station skill could not be loaded.'

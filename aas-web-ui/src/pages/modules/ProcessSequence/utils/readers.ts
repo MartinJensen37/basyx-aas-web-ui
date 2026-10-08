@@ -1,5 +1,6 @@
 import type { SkillCatalog, SkillDefinition } from '../types'
 import { skillSemantic } from '../constants/contracts'
+import { readArsoSkills } from './arsoSkills'
 import { childrenOf, semanticId } from './planSources'
 
 type Element = Record<string, any>
@@ -15,7 +16,7 @@ function number (element: Element, name: string): number | null {
 
 /** The skill catalog is an application contract; IDTA CapabilityRealizedBy points to these entries. */
 export function readSkillCatalog (submodel: Element): SkillCatalog {
-  const skills: SkillDefinition[] = []
+  const skills: SkillDefinition[] = readArsoSkills(submodel)
   function visit (element: Element, path: string[]): void {
     if (named(element, 'SkillId')) {
       skills.push({

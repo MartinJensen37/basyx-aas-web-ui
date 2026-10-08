@@ -3,7 +3,7 @@ import { useAASHandling } from '@/composables/AAS/AASHandling'
 import { useSMHandling } from '@/composables/AAS/SMHandling'
 import { useAASDiscoveryClient } from '@/composables/Client/AASDiscoveryClient'
 import { useAASRepositoryClient } from '@/composables/Client/AASRepositoryClient'
-import { PROCESS_PARAMETERS_SUBMODEL, SKILLS_SUBMODEL_SEMANTIC_ID } from '../constants/contracts'
+import { ARSO_SKILLS_SUBMODEL, PROCESS_PARAMETERS_SUBMODEL, SKILLS_SUBMODEL_SEMANTIC_ID } from '../constants/contracts'
 import { readCapabilities } from '../utils/capabilities'
 import { readMaterialScopes, readPlanProcesses, semanticId } from '../utils/planSources'
 import { readSkillCatalog } from '../utils/readers'
@@ -40,7 +40,7 @@ export function usePlanSources () {
 
   async function loadSkills (aasId: string) {
     const models = await submodels(aasId)
-    return models.filter(sm => sm && semanticId(sm).includes('/Skills/')).flatMap(sm => readSkillCatalog(sm).skills)
+    return models.filter(sm => sm && [SKILLS_SUBMODEL_SEMANTIC_ID, ARSO_SKILLS_SUBMODEL].includes(semanticId(sm))).flatMap(sm => readSkillCatalog(sm).skills)
   }
 
   async function loadCapabilities (aasId: string) {
@@ -63,7 +63,7 @@ export function usePlanSources () {
     const shells = await fetchAasList()
     const results = await Promise.allSettled(shells.map(async shell => ({
       shell,
-      eligible: (await submodels(String(shell.id))).some(model => semanticId(model) === SKILLS_SUBMODEL_SEMANTIC_ID
+      eligible: (await submodels(String(shell.id))).some(model => [SKILLS_SUBMODEL_SEMANTIC_ID, ARSO_SKILLS_SUBMODEL].includes(semanticId(model))
         || readCapabilities(model, String(shell.id)).some(capability => capability.role === 'Offered')),
     })))
     return results.flatMap(result => result.status === 'fulfilled' && result.value.eligible ? [result.value.shell] : [])

@@ -10,15 +10,15 @@ export type CapabilityReference = z.infer<typeof capabilityReferenceSchema>
 export type CapabilityRequirement = z.infer<typeof requirementSchema>
 const parameterSchema = z.object({
   name: z.string(), group: z.enum(['ProductParameters', 'ProcessParameters', 'ResourceParameters']),
-  dataType: z.string(), value: z.string(), source: sourceSchema, unit: z.string().optional(),
+  dataType: z.string(), value: z.string(), source: sourceSchema, unit: z.string().optional(), semanticIds: z.array(z.string()).optional(),
 })
 const processSchema = z.object({
   processId: z.string(), name: z.string(), source: sourceSchema,
   parameters: z.array(parameterSchema), material: z.array(z.unknown()),
   requiredCapabilities: z.array(requirementSchema).optional(),
 })
-const bindingSchema = z.object({ name: z.string(), value: z.string(), source: sourceSchema.nullable() })
-export const outputSchema = z.object({ id: z.string().min(1), name: z.string(), type: z.enum(['boolean', 'number', 'string']), unit: z.string() })
+const bindingSchema = z.object({ name: z.string(), value: z.string(), source: sourceSchema.nullable(), target: capabilityReferenceSchema.optional() })
+export const outputSchema = z.object({ id: z.string().min(1), name: z.string(), type: z.enum(['boolean', 'number', 'string']), unit: z.string(), source: capabilityReferenceSchema.optional() })
 export type PlanOutput = z.infer<typeof outputSchema>
 export const conditionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('everyNthProduct'), every: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) }),

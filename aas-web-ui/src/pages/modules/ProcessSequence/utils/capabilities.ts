@@ -3,6 +3,7 @@ import type { CapabilityProperty } from './capabilityMatching'
 import { CAPABILITY_SUBMODEL, capabilitySemantic } from '../constants/capabilities'
 import { capabilityReferenceSchema } from '../types/plan'
 import { readCapabilityProperties } from './capabilityMatching'
+import { canonicalMeaning } from './parameterSemantics'
 import { childrenOf, semanticId } from './planSources'
 
 export type CapabilityDescription = CapabilityRequirement & {
@@ -38,13 +39,13 @@ export function readCapabilities (submodel: Record<string, any>, aasId: string):
       ],
     }
     return {
-      name: capability.displayName?.find((name: Record<string, string>) => name.language === 'en')?.text ?? capability.idShort,
+      name: capability.displayName?.find((name: Record<string, string>) => name.language === 'en')?.text ?? container.displayName?.find((name: Record<string, string>) => name.language === 'en')?.text ?? container.idShort ?? capability.idShort,
       reference, aasId, role: roles.length === 1 ? roles[0] : 'NotAssigned',
       properties: readCapabilityProperties(container),
       hasConstraints: childrenOf(container).some(child => semanticId(child) === capabilitySemantic('CapabilityRelations')
         && childrenOf(child).some(item => ['ConstraintSet', 'ComposedOfSet', 'GeneralizedBySet'].some(name => semanticId(item) === capabilitySemantic(name)))),
       semanticIds: (capability.supplementalSemanticIds ?? []).flatMap((ref: CapabilityReference) =>
-        ref.keys?.length === 1 && ref.keys[0].value ? [ref.keys[0].value] : []),
+        ref.keys?.length === 1 && ref.keys[0].value ? [canonicalMeaning(ref.keys[0].value)] : []),
       realizedBy: childrenOf(container).filter(child => semanticId(child) === capabilitySemantic('CapabilityRelations')).flatMap(relations => childrenOf(relations).filter(relation => relation.modelType === 'RelationshipElement'
         && semanticId(relation) === capabilitySemantic('CapabilityRealizedBy')).flatMap(relation => {
         const first = capabilityReferenceSchema.safeParse(relation.first)
@@ -61,7 +62,7 @@ export function capabilityCandidates (requirements: CapabilityRequirement[], cat
     return []
   }
   const meanings = requirements.map(requirement => requirement.reference.type === 'ExternalReference'
-    ? (requirement.reference.keys.length === 1 ? [requirement.reference.keys[0].value] : [])
+    ? (requirement.reference.keys.length === 1 ? [canonicalMeaning(requirement.reference.keys[0].value)] : [])
     : catalog.find(item => item.role === 'Required' && referenceKey(item.reference) === referenceKey(requirement.reference))?.semanticIds ?? [])
   const offered = catalog.filter(item => item.role === 'Offered')
   return [...new Set(offered.map(item => item.aasId))].filter(aasId => meanings.every(ids => ids.length > 0

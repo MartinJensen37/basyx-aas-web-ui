@@ -2,6 +2,7 @@ import type { PlanParameter, PlanProcess, PlanScope, SourceReference } from '../
 import { PROCESS_STEP_CAPABILITY_SEMANTIC_ID, processParameterSemantic } from '../constants/contracts.ts'
 import { capabilityReferenceSchema } from '../types/plan.ts'
 import { readBulkCount } from './bulkCount.ts'
+import { parameterMeanings } from './parameterSemantics.ts'
 
 type Element = Record<string, any>
 
@@ -63,6 +64,7 @@ function parameterLeaves (element: Element, source: SourceReference, group: Plan
   const unit = element.embeddedDataSpecifications?.find((spec: Element) => spec.dataSpecificationContent?.modelType === 'DataSpecificationIec61360')?.dataSpecificationContent?.unit
   return [{
     name: label(element) || source.path.at(-1) || '', group, source,
+    ...(parameterMeanings(element).length > 0 ? { semanticIds: parameterMeanings(element) } : {}),
     dataType: String(element.valueType ?? element.modelType ?? ''),
     value: typeof element.value === 'object' ? JSON.stringify(element.value) : String(element.value ?? ''),
     ...(typeof unit === 'string' ? { unit } : {}),

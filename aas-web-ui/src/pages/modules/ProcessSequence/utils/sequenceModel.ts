@@ -35,11 +35,11 @@ export function sourceFrom (element: AasElement): SourceReference {
 
 export function processElements (process: PlanProcess): AasElement[] {
   return [prop('ProcessId', process.processId), prop('Name', process.name), ...sourceElements(process.source),
-    collection('Parameters', process.parameters.map((parameter, index) => collection(indexed('Parameter', index), [
+    collection('Parameters', process.parameters.map((parameter, index) => ({ ...collection(indexed('Parameter', index), [
       prop('Name', parameter.name), prop('Group', parameter.group), prop('DataType', parameter.dataType), prop('Value', parameter.value),
       ...(parameter.unit === undefined ? [] : [prop('Unit', parameter.unit)]),
       ...sourceElements(parameter.source),
-    ], 'Parameter'))), collection('Materials', structuredClone(process.material) as AasElement[]),
+    ], 'Parameter'), ...(parameter.semanticIds?.length ? { supplementalSemanticIds: parameter.semanticIds.map(id => sem(id)) } : {}) }))), collection('Materials', structuredClone(process.material) as AasElement[]),
     ...(process.requiredCapabilities === undefined ? [] : [requirements(process.requiredCapabilities)]),
   ]
 }
@@ -138,6 +138,7 @@ export function buildNodes (items: PlanNode[], scopeRef: (id: string) => Capabil
         if (node.outputs !== undefined) {
           common.push(collection('Outputs', node.outputs.map((output, index) => collection(indexed('Output', index), [
             prop('OutputId', output.id), prop('Name', output.name), prop('DataType', output.type), prop('Unit', output.unit),
+            ...(output.source ? [ref('ResultReference', output.source)] : []),
           ], 'Output'))))
         }
         if (operation) {
@@ -160,6 +161,7 @@ export function buildNodes (items: PlanNode[], scopeRef: (id: string) => Capabil
         }
         common.push(collection('Bindings', node.bindings.map((binding, index) => collection(indexed('Binding', index), [
           prop('Name', binding.name), prop('Value', binding.value), ...(binding.source ? sourceElements(binding.source) : []),
+          ...(binding.target ? [ref('InputReference', binding.target)] : []),
         ], 'Binding'))))
       }
     }
@@ -223,16 +225,16 @@ export function readSequenceSubmodel (submodel: AasElement): ProcessPlan {
         ...common, kind, process: process
           ? {
               processId: value(process, 'ProcessId'), name: value(process, 'Name'), source: sourceFrom(process),
-              parameters: children(process, 'Parameters').map(parameter => ({ name: value(parameter, 'Name'), group: value(parameter, 'Group') as 'ProductParameters', dataType: value(parameter, 'DataType'), value: value(parameter, 'Value'), source: sourceFrom(parameter), ...(field(parameter, 'Unit') ? { unit: value(parameter, 'Unit') } : {}) })),
+              parameters: children(process, 'Parameters').map(parameter => ({ name: value(parameter, 'Name'), group: value(parameter, 'Group') as 'ProductParameters', dataType: value(parameter, 'DataType'), value: value(parameter, 'Value'), source: sourceFrom(parameter), ...(parameter.supplementalSemanticIds?.length ? { semanticIds: parameter.supplementalSemanticIds.map((reference: CapabilityReference) => reference.keys[0].value) } : {}), ...(field(parameter, 'Unit') ? { unit: value(parameter, 'Unit') } : {}) })),
               material: children(process, 'Materials'), ...(readRequirements(process) ? { requiredCapabilities: readRequirements(process) } : {}),
             }
           : null,
-        ...(field(element, 'Outputs') ? { outputs: children(element, 'Outputs').map(output => ({ id: value(output, 'OutputId'), name: value(output, 'Name'), type: value(output, 'DataType') as 'boolean', unit: value(output, 'Unit') })) } : {}),
+        ...(field(element, 'Outputs') ? { outputs: children(element, 'Outputs').map(output => ({ id: value(output, 'OutputId'), name: value(output, 'Name'), type: value(output, 'DataType') as 'boolean', unit: value(output, 'Unit'), ...(field(output, 'ResultReference') ? { source: field(output, 'ResultReference')!.value } : {}) })) } : {}),
         resourceAasId: field(element, 'Resource')?.value?.keys?.[0]?.value ?? '', skillId: value(element, 'SkillId'),
         ...(field(element, 'Skill') ? { skillReference: field(element, 'Skill')!.value } : {}),
         ...(field(element, 'ExecutionMode') ? { executionMode: value(element, 'ExecutionMode') as 'manual' | 'station' } : {}),
         ...(readRequirements(element) ? { requiredCapabilities: readRequirements(element) } : {}),
-        bindings: children(element, 'Bindings').map(binding => ({ name: value(binding, 'Name'), value: value(binding, 'Value'), source: field(binding, 'SourceElement') ? sourceFrom(binding) : null })),
+        bindings: children(element, 'Bindings').map(binding => ({ name: value(binding, 'Name'), value: value(binding, 'Value'), source: field(binding, 'SourceElement') ? sourceFrom(binding) : null, ...(field(binding, 'InputReference') ? { target: field(binding, 'InputReference')!.value } : {}) })),
       }
     })
   }

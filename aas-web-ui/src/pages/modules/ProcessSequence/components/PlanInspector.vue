@@ -108,6 +108,7 @@
 <script setup lang="ts">
   import type { PlanNode, PlanProcess, PlanScope } from '../types/plan'
   import { newBranch } from '../utils/plan'
+  import { clearSkill } from '../utils/skillAssignment'
   import InspectorSection from './InspectorSection.vue'
   import PlanBindings from './PlanBindings.vue'
   import PlanCapabilities from './PlanCapabilities.vue'
@@ -141,9 +142,7 @@
     node.value.executionMode = mode
     if (mode === 'manual') {
       node.value.resourceAasId = ''
-      node.value.skillId = ''
-      delete node.value.skillReference
-      node.value.bindings = []
+      clearSkill(node.value)
     }
   }
 </script>
