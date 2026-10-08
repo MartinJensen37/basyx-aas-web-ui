@@ -4,9 +4,10 @@ import { jsonization } from '@aas-core-works/aas-core3.1-typescript'
 import { useAASRepositoryClient } from '@/composables/Client/AASRepositoryClient'
 import { useSMRepositoryClient } from '@/composables/Client/SMRepositoryClient'
 import { useRequestHandling } from '@/composables/RequestHandling'
+import { base64Encode } from '@/utils/EncodeDecodeUtils'
 import { newPlan, parsePlan } from '../utils/plan'
 import { readPlanProcesses } from '../utils/planSources'
-import { buildSequenceDocuments, canonical, defaultSequenceId, DOCUMENT_SEMANTIC_ID, processReferences, readSequenceDocuments, referenceId, semanticOf } from '../utils/sequenceDocuments'
+import { buildSequenceDocuments, canonical, defaultSequenceId, DOCUMENT_SEMANTIC_ID, isSequenceDocument, processReferences, readSequenceDocuments, referenceId, semanticOf } from '../utils/sequenceDocuments'
 import { field, readSequenceSubmodel, SEQUENCE_SEMANTIC_ID, value } from '../utils/sequenceModel'
 
 export const planSubmodelId = defaultSequenceId
@@ -18,7 +19,7 @@ export function buildPlanSubmodel (productAasId: string) {
 export function usePlanRepository () {
   const { getSmEndpointById, postSubmodel, putSubmodel, fetchAttachmentFile } = useSMRepositoryClient()
   const { getAasEndpointById, getSubmodelRefsById } = useAASRepositoryClient()
-  const { getRequest, postRequest } = useRequestHandling()
+  const { getRequest, postRequest, deleteRequest } = useRequestHandling()
   const primaryIds = new Map<string, string>()
   const baselines = new Map<string, Map<string, { owner: string, content: string | null }>>()
   const models = new Map<string, AasElement>()
@@ -46,7 +47,7 @@ export function usePlanRepository () {
     const found: string[] = []
     for (const id of candidates) {
       const model = await fetchModel(id, owner)
-      if (model && (semanticOf(model) === SEQUENCE_SEMANTIC_ID || semanticOf(model) === 'https://smartproductionlab.aau.dk/SubmodelTemplate/ProcessSequence/2/0' || (semanticOf(model) === DOCUMENT_SEMANTIC_ID && value(model, 'Role') === 'Primary'))) {
+      if (model && (semanticOf(model) === SEQUENCE_SEMANTIC_ID || semanticOf(model) === 'https://smartproductionlab.aau.dk/SubmodelTemplate/ProcessSequence/2/0' || (isSequenceDocument(model) && value(model, 'Role') === 'Primary'))) {
         found.push(id)
       }
     }
@@ -65,7 +66,7 @@ export function usePlanRepository () {
     baselines.set(owner, baseline)
     async function get (id: string, aas = owner): Promise<AasElement> {
       const model = await fetchModel(id, aas)
-      const sequence = model && [DOCUMENT_SEMANTIC_ID, SEQUENCE_SEMANTIC_ID].includes(semanticOf(model))
+      const sequence = model && (isSequenceDocument(model) || semanticOf(model) === SEQUENCE_SEMANTIC_ID)
       const documentOwner = sequence && (referenceId(field(model!, 'Subject')) || referenceId(field(model!, 'Product')))
       // Another asset's sequence is checked by that asset's own repository session.
       if (!documentOwner || documentOwner === owner) {
@@ -83,7 +84,10 @@ export function usePlanRepository () {
       return null
     }
     models.set(id, model)
-    if (semanticOf(model) === DOCUMENT_SEMANTIC_ID) {
+    if (isSequenceDocument(model)) {
+      if (semanticOf(model) !== DOCUMENT_SEMANTIC_ID) {
+        migration.add(owner)
+      }
       return parsePlan(JSON.stringify(await readSequenceDocuments(model, get)), owner)
     }
     migration.add(owner)
@@ -159,26 +163,7 @@ export function usePlanRepository () {
       }
     }
     await check(owner)
-    // Children are written before the primary document that exposes their references.
-    const ordered: AasElement[] = []
-    const visited = new Set<string>()
-    function order (document: AasElement): void {
-      if (visited.has(document.id)) {
-        return
-      }
-      visited.add(document.id)
-      for (const reference of field(document, 'Subprocesses')?.value ?? []) {
-        const child = documents.find(item => item.id === referenceId(reference))
-        if (child) {
-          order(child)
-        }
-      }
-      ordered.push(document)
-    }
     for (const document of documents) {
-      order(document)
-    }
-    for (const document of ordered) {
       const original = models.get(document.id)
       const owned = new Set(document.submodelElements.map((element: AasElement) => element.idShort))
       document.submodelElements.push(...(original?.submodelElements ?? []).filter((element: AasElement) => !owned.has(element.idShort)
@@ -204,6 +189,21 @@ export function usePlanRepository () {
           throw new Error('The plan could not be linked to the product.')
         }
       }
+    }
+    // The embedded copy is now authoritative. Keep legacy repository documents for other consumers.
+    const references = await getSubmodelRefsById(owner)
+    for (const [id] of baseline) {
+      const old = models.get(id)
+      if (id === primaryId || !old || value(old, 'Role') !== 'Subprocess' || referenceId(field(old, 'Subject')) !== owner) {
+        continue
+      }
+      if (references.some(reference => reference.keys?.some((key: { value: string }) => key.value === id))) {
+        const detached = await deleteRequest(`${getAasEndpointById(owner)}/submodel-refs/${base64Encode(id)}`, new Headers(), 'removing the migrated subprocess link', true)
+        if (!detached.success && detached.status !== 404) {
+          throw new Error('The sequence was saved, but a legacy subprocess link could not be removed. Retry saving.')
+        }
+      }
+      baseline.delete(id)
     }
     migration.delete(owner)
     for (const scope of next.scopes) {

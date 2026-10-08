@@ -4,11 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildDemo } from '../demo/seed'
 import { newPlan } from '../utils/plan'
 import { defaultSequenceId } from '../utils/sequenceDocuments'
+import { buildSequenceDocuments as buildV2 } from '../utils/sequenceDocumentsV2'
 import { buildSequenceSubmodel, field } from '../utils/sequenceModel'
 import { buildPlanSubmodel, planSubmodelId, usePlanRepository } from './usePlanRepository'
 
 const mocks = vi.hoisted(() => ({
-  getRequest: vi.fn(), postRequest: vi.fn(), postSubmodel: vi.fn(),
+  getRequest: vi.fn(), postRequest: vi.fn(), deleteRequest: vi.fn(), postSubmodel: vi.fn(),
   fetchAttachmentFile: vi.fn(), putSubmodel: vi.fn(), getSubmodelRefsById: vi.fn(),
 }))
 vi.mock('@/composables/RequestHandling', () => ({ useRequestHandling: () => mocks }))
@@ -24,6 +25,7 @@ describe('plan persistence', () => {
     vi.resetAllMocks()
     mocks.getRequest.mockResolvedValue({ success: false, status: 404 })
     mocks.postRequest.mockResolvedValue({ success: true })
+    mocks.deleteRequest.mockResolvedValue({ success: true })
     mocks.postSubmodel.mockResolvedValue(true)
     mocks.putSubmodel.mockResolvedValue(true)
     mocks.getSubmodelRefsById.mockResolvedValue([])
@@ -47,7 +49,7 @@ describe('plan persistence', () => {
     expect(await repository.load('urn:product')).toEqual(saved)
   })
 
-  it('resolves separately stored subprocesses and detects changed process sources before saving', async () => {
+  it('resolves embedded subprocesses and detects changed process sources before saving', async () => {
     const demo = buildDemo()
     const models = new Map<string, AasElement>(demo.submodels.map(model => [model.id, structuredClone(model)]))
     const owner = demo.plans[0]!.productAasId
@@ -72,6 +74,36 @@ describe('plan persistence', () => {
     mocks.putSubmodel.mockClear()
     await expect(repository.save(plan)).rejects.toThrow('changed in another view')
     expect(mocks.putSubmodel).not.toHaveBeenCalled()
+  })
+
+  it('embeds old local definitions before detaching their links and supports a cleanup retry', async () => {
+    const plan = newPlan('urn:product', 'P')
+    plan.scopes.push({ id: 'draft', name: 'Keep this draft', parentId: 'product', material: null, nodes: [] })
+    plan.scopes[0]!.nodes = [{ id: 'invoke', kind: 'call', name: 'Call draft', scopeId: 'draft' }]
+    const documents = buildV2(plan, planSubmodelId(plan.productAasId), [])
+    const models = new Map(documents.map(model => [model.id, model]))
+    let references = documents.map(model => ({ type: 'ModelReference', keys: [{ type: 'Submodel', value: model.id }] }))
+    mocks.getSubmodelRefsById.mockImplementation(async () => references)
+    mocks.getRequest.mockImplementation(async endpoint => ({ success: true, data: structuredClone(models.get(endpoint.replace('https://example.test/submodels/', ''))) }))
+    mocks.putSubmodel.mockImplementation(async model => {
+      models.set(model.id, jsonization.toJsonable(model) as AasElement)
+      return true
+    })
+    const repository = usePlanRepository()
+    const loaded = (await repository.load(plan.productAasId))!
+    expect(repository.needsMigration(plan.productAasId)).toBe(true)
+    mocks.deleteRequest.mockResolvedValueOnce({ success: false, status: 503 }).mockImplementation(async () => {
+      references = references.slice(0, 1)
+      return { success: true }
+    })
+    await expect(repository.save(loaded)).rejects.toThrow('legacy subprocess link')
+    expect(field(models.get(documents[0]!.id)!, 'LocalSubprocesses')).toBeDefined()
+    await repository.save(loaded)
+    expect(models.has(documents[1]!.id)).toBe(true)
+    expect(mocks.deleteRequest).toHaveBeenCalledTimes(2)
+    const reloaded = (await repository.load(plan.productAasId))!
+    expect(reloaded.scopes.map(scope => [scope.id, scope.name, scope.nodes])).toEqual(plan.scopes.map(scope => [scope.id, scope.name, scope.nodes]))
+    expect(repository.needsMigration(plan.productAasId)).toBe(false)
   })
 
   it('does not turn an authorization or network failure into an empty editable plan', async () => {

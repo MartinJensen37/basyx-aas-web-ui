@@ -224,7 +224,7 @@ test('authors assembly sequences and parallel subprocesses, then reloads the ser
   expect(parallel.branches[1].nodes[0].name).toBe('Prepare control')
   expect(driveStep.process!.parameters).toHaveLength(3)
   expect(driveStep).toMatchObject({
-    resourceAasId: resourceId, skillId: 'Inspect', bindings: [{ name: 'setpoint', value: 'torque-target', source: null }],
+    resourceAasId: resourceId, skillId: '', bindings: [{ name: 'setpoint', value: 'torque-target', source: null }],
     requiredCapabilities: [
       { name: 'Inspect', reference: requirementReference('Inspect') },
       { name: 'Prepare', reference: requirementReference('Prepare') },

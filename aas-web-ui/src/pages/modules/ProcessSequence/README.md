@@ -33,12 +33,12 @@ Changing a configured operation to a container wraps it without losing its ident
 | IDTA 02011 Hierarchical Structures | Product composition and material occurrence references |
 | IDTA 02031-1 Process Parameters Type | Available processes, product/process/resource parameters and ProcessBoM |
 | IDTA 02020 Capability Description | Required and offered capabilities, properties, role qualifiers and skill realization references |
-| Application Production Sequence 2.0 | Ordered operations, calls, branches, parameter overrides, requirement overrides and assignments |
+| Application Production Sequence 3.0 | Ordered operations, calls, branches, parameter overrides, requirement overrides and assignments |
 | Application Skills 1.0 | Station skills and their parameter interfaces |
 
 The IDTA Process Parameters semantic ID is exactly `https://admin-shell-io/idta/SubmodelTemplate/ProcessParameters/1/0`; the hostname spelling is intentional. Required-capability links inside Process collections are an application extension: `https://smartproductionlab.aau.dk/ProcessParameters/RequiredCapability/1/0`. These are repeatable ReferenceElements pointing to Required-role Capability elements. They do not replace or redefine IDTA fields.
 
-Production Sequence and Skills are application templates, not published IDTA standards. See [the sequence contract](templates/README.md) and [machine-readable AAS template](templates/ProductionSequence.json). Each product stores its own Steps; subprocesses have separate submodels linked by SequenceReference. The product tree comes from the BoM and is never copied into the sequence. Saving writes native AAS collections, properties and references visible in the normal AAS viewer. Older JSON Definition attachments are readable and retained when migrated; subsequent saves use structured elements.
+Production Sequence and Skills are application templates, not published IDTA standards. See [the sequence contract](templates/README.md) and [machine-readable AAS template](templates/ProductionSequence.json). Each product stores its own Steps; local subprocesses are nested collections, reused through SequenceReference paths. Separately owned assemblies retain their own sequence submodels. The product tree comes from the BoM and is never copied into the sequence. Saving writes native AAS collections, properties and references visible in the normal AAS viewer. Older JSON Definition attachments are readable and retained when migrated; subsequent saves use structured elements.
 
 ## Capability matching
 
@@ -77,7 +77,7 @@ Select an inspection step and choose **Optional** from **Step type**. Set **Run 
 
 The product number is one-based and belongs to the current production run. Every called subprocess receives the same product number; entering a subprocess or retrying an operation does not advance the counter. Nested intervals must both match. This is a plan definition: the execution system must supply and preserve the product ordinal across retries and reset it when starting a new run. No live equipment counter is simulated by the editor.
 
-In **Combined steps**, change **Product number in run** to preview both paths. Skipped operations do not become required predecessors. The saved condition is an AAS collection with semantic IDs for ConditionType, EveryNProducts and CounterScope. All saved definitions now use PlanSchema `production-sequence/2.0`. Earlier scope-based and JSON formats remain readable and migrate on save. See the template contract for details.
+In **Combined steps**, change **Product number in run** to preview both paths. Skipped operations do not become required predecessors. The saved condition is an AAS collection with semantic IDs for ConditionType, EveryNProducts and CounterScope. Saved submodels use semantic contract `ProductionSequence/3/0`; the version is not repeated in a PlanSchema property. Earlier scope-based and JSON formats remain readable and migrate on save. See the template contract for details.
 
 The prepared **Vial 2 mL - inspection every 5** recipe demonstrates this flow without changing the existing recipes.
 

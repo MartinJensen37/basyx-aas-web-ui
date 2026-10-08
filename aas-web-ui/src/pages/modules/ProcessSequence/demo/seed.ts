@@ -5,7 +5,7 @@ import { upgradeDemoBulkCounts } from '../utils/bulkCount.ts'
 import { materialSemantic, upgradeMaterialUses } from '../utils/materials.ts'
 import { readPlanProcesses } from '../utils/planSources.ts'
 import { extractAssembly } from '../utils/planTree.ts'
-import { buildSequenceDocuments, canonical, DOCUMENT_SEMANTIC_ID, processReferences, readSequenceDocuments, referenceId, semanticOf } from '../utils/sequenceDocuments.ts'
+import { buildSequenceDocuments, canonical, DOCUMENT_SEMANTIC_ID, isSequenceDocument, processReferences, readSequenceDocuments, referenceId, semanticOf } from '../utils/sequenceDocuments.ts'
 import { field, readSequenceSubmodel, SEQUENCE_SEMANTIC_ID, value } from '../utils/sequenceModel.ts'
 import { buildPharmaDemo } from './pharma.ts'
 
@@ -371,6 +371,12 @@ export async function seedDemo (repository: string): Promise<void> {
     const primaryId = `${base}/sm/process-plan/${encode(plan.productAasId)}`
     const original = await fetchSubmodel(primaryId)
     const sources = new Map<string, Record<string, any>>()
+    const obsolete = new Map<string, Record<string, any>>()
+    for (const scope of plan.scopes) {
+      if (!scope.planAasId && scope.sequenceId && scope.sequenceId !== primaryId && !scope.sequenceId.startsWith('embedded:')) {
+        obsolete.set(scope.sequenceId, await fetchSubmodel(scope.sequenceId))
+      }
+    }
     const processes: PlanProcess[] = []
     for (const source of processReferences(plan)) {
       if (!sources.has(source.submodelId)) {
@@ -380,7 +386,7 @@ export async function seedDemo (repository: string): Promise<void> {
     }
     const documents = buildSequenceDocuments(plan, primaryId, processes)
     // Check source and owner content again before the migration writes anything.
-    for (const [id, model] of [[primaryId, original], ...sources] as [string, Record<string, any>][]) {
+    for (const [id, model] of [[primaryId, original], ...sources, ...obsolete] as [string, Record<string, any>][]) {
       if (canonical(await fetchSubmodel(id)) !== canonical(model)) {
         throw new Error('Demo data changed during migration; reload and retry.')
       }
@@ -414,6 +420,14 @@ export async function seedDemo (repository: string): Promise<void> {
         }
       }
     }
+    // Detach only definitions embedded by this migration, after the owner document was saved.
+    // Retain the original repository documents so other existing references keep working.
+    for (const id of obsolete.keys()) {
+      const removed = await fetch(`${target}/shells/${encode(plan.productAasId)}/submodel-refs/${encode(id)}`, { method: 'DELETE' })
+      if (!removed.ok && removed.status !== 404) {
+        throw new Error(`Removing migrated subprocess link: HTTP ${removed.status}`)
+      }
+    }
   }
   async function readPlan (id: string): Promise<ProcessPlan | null> {
     const modelResponse = await fetch(pathFor(id).replace('/submodel-elements/Definition', ''))
@@ -421,7 +435,7 @@ export async function seedDemo (repository: string): Promise<void> {
       throw new Error(`Reading sequence: HTTP ${modelResponse.status}`)
     }
     const model = await modelResponse.json() as Record<string, any>
-    if (semanticOf(model) === DOCUMENT_SEMANTIC_ID) {
+    if (isSequenceDocument(model)) {
       return readSequenceDocuments(model, fetchSubmodel)
     }
     if (model.semanticId?.keys?.[0]?.value === SEQUENCE_SEMANTIC_ID) {

@@ -1,11 +1,11 @@
 import type { AasElement } from '../../src/pages/modules/ProcessSequence/utils/sequenceModel'
 import type { APIRequestContext } from '@playwright/test'
 import { Buffer } from 'node:buffer'
-import { DOCUMENT_SEMANTIC_ID, readSequenceDocuments, semanticOf } from '../../src/pages/modules/ProcessSequence/utils/sequenceDocuments'
+import { isSequenceDocument, readSequenceDocuments } from '../../src/pages/modules/ProcessSequence/utils/sequenceDocuments'
 import { readSequenceSubmodel } from '../../src/pages/modules/ProcessSequence/utils/sequenceModel'
 
 export async function readStoredSequence (model: AasElement, request: APIRequestContext, repository: string) {
-  if (semanticOf(model) !== DOCUMENT_SEMANTIC_ID) {
+  if (!isSequenceDocument(model)) {
     return readSequenceSubmodel(model)
   }
   return readSequenceDocuments(model, async id => {
@@ -31,7 +31,7 @@ export async function cleanSequenceDocuments (request: APIRequestContext, reposi
       }
       const endpoint = `${repository}/submodels/${Buffer.from(id).toString('base64url')}`
       const model = await request.get(endpoint)
-      if (model.ok() && semanticOf(await model.json()) === DOCUMENT_SEMANTIC_ID) {
+      if (model.ok() && isSequenceDocument(await model.json())) {
         await request.delete(endpoint)
       }
     }

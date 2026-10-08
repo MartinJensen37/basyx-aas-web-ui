@@ -1,15 +1,17 @@
-# Application Production Sequence 2.0
+# Application Production Sequence 3.0
 
-Semantic ID: `https://smartproductionlab.aau.dk/SubmodelTemplate/ProductionSequence/2/0`.
-Wire PlanSchema: `production-sequence/2.0`.
+Semantic ID: `https://smartproductionlab.aau.dk/SubmodelTemplate/ProductionSequence/3/0`.
+The submodel semantic ID identifies the contract version; no duplicate PlanSchema property is stored.
 
-This is a project-owned authoring contract, not an IDTA publication. Element semantic IDs use `https://smartproductionlab.aau.dk/ProductionSequence/{Name}/1/0`; unchanged element meanings retain their identifiers. [ProductionSequence.json](ProductionSequence.json) and [ProductionSubprocess.json](ProductionSubprocess.json) are AAS `kind=Template` examples with cardinality qualifiers. Generate both with `pnpm exec node src/pages/modules/ProcessSequence/templates/generate.ts`.
+This is a project-owned authoring contract, not an IDTA publication. Element semantic IDs use `https://smartproductionlab.aau.dk/ProductionSequence/{Name}/1/0`; unchanged element meanings retain their identifiers. [ProductionSequence.json](ProductionSequence.json) is an AAS `kind=Template` example with cardinality qualifiers. Generate it with `pnpm exec node src/pages/modules/ProcessSequence/templates/generate.ts`.
 
 ## Ownership and references
 
 Each product, assembly or part owns one primary sequence. It stores its own steps and references only its immediate dependencies. The Hierarchical Structures submodel owns the physical product tree; Production Sequence does not repeat it. A part without work has an empty Steps collection.
 
-A subprocess authored within the same product is a separate sequence submodel attached to that product's AAS. A Subprocesses collection catalogs direct local child definitions, including unfinished subprocesses that have not yet been called. A call points directly to its target submodel using SequenceReference. Multiple calls reuse one definition. Product-component calls target that component's sequence; the component's children are resolved recursively. Opening the component on its own edits the same definition shown from a parent product.
+A subprocess authored within the same product is a nested SubmodelElementCollection inside its owner's ProductionSequence. The optional Subprocesses collection (semantic meaning `LocalSubprocesses`) contains direct `SubprocessDefinition` collections, including unfinished definitions that have not yet been called. Each definition contains its own Steps and optional nested Subprocesses. A call uses an AAS ModelReference with the root Submodel key and the complete collection path. Multiple calls reuse one definition. The new collection meanings have new semantic IDs; the former reference catalog's semantic ID is not reused.
+
+Product-component calls still target that component's own sequence submodel. Its children are resolved recursively. Opening the component on its own edits the same definition shown from a parent product. A process-only subprocess belongs inside its owner's sequence; a separately owned assembly keeps its own submodel.
 
 ```text
 Robot sequence:      parallel { call Drive sequence; call Control sequence }
@@ -25,22 +27,23 @@ There are no persisted Scopes, ParentScope or RootScope fields. The editor still
 
 | Location | Fields |
 | --- | --- |
-| Root | PlanSchema, Revision (nonnegative integer), SequenceId, Name, Role (`Primary` or `Subprocess`), Subject (owner AAS reference), Steps |
-| Root, optional | Component occurrence and Subprocesses (direct local child sequence references) |
+| Root | Revision (nonnegative integer), SequenceId, Name, Role (`Primary`), Subject (owner AAS reference), Steps |
+| Root, optional | Component occurrence and Subprocesses (direct local child definition collections) |
+| SubprocessDefinition | SequenceId, Name, Steps; optional Component and nested Subprocesses; owner and revision inherited from root |
 | Steps | Zero or more Step collections with NodeId, Kind, Name and unique nonnegative Order |
-| Operation (`step`) | Optional paired ProcessOwner/ProcessReference; optional ParameterOverrides, MaterialOverrides, RequiredCapabilities, Resource, Skill, ExecutionMode, Outputs; SkillId and Bindings |
-| Call (`call`) | SequenceReference (Submodel reference); optional OccurrenceId and Component for an external component occurrence |
+| Operation (`step`) | Optional ProcessReference; optional ParameterOverrides, MaterialOverrides, RequiredCapabilities, Resource, Skill, ExecutionMode, Outputs and Bindings; ProcessOwner only for a different AAS |
+| Call (`call`) | SequenceReference (Submodel reference for a component or collection path for a local subprocess); optional OccurrenceId and Component for an external component occurrence |
 | Optional (`conditional`) | Condition and nested Steps |
 | Parallel (`parallel`) | At least two ordered Branch collections, each with BranchId, Name, Order and Steps |
 | Decision (`decision`) | Condition and exactly two branches: Order 0 Yes and Order 1 No |
 | ParameterOverride | ParameterReference, Value, DataType; optional Unit |
-| Component | SourceAas, SourceElement (BoM occurrence), GlobalAssetId |
+| Component | SourceElement (BoM occurrence), GlobalAssetId; SourceAas only when different from Subject |
 | RequiredCapabilities | Zero or more RequiredCapability references with display names |
-| Bindings | Zero or more Binding collections with Name, Value and optional paired SourceAas/SourceElement |
+| Bindings | Zero or more Binding collections with Name and either constant Value or SourceElement; SourceAas only when different from Subject |
 
 A new plan contains only root metadata and empty Steps. Draft operations may have no selected process. Local SequenceId values must be unique within an owner; NodeId values must be unique within a definition including branches. Sequence submodel IDs remain stable when labels change. Order determines execution order independently of collection array order. Containment, ownership and call cycles are invalid. Missing definitions and incompatible overrides are errors, not empty replacement plans.
 
-Subject and Resource reference AASs. ProcessOwner identifies the source AAS; ProcessReference identifies the full Process Parameters collection path. ParameterReference identifies the original parameter. Capability references identify IDTA Capability elements; Skill identifies an offered skill catalog entry. Binding sources identify process parameters; a null source uses the constant Value.
+Subject and Resource reference AASs. ProcessOwner defaults to Subject and is written only for a different source AAS; ProcessReference identifies the full Process Parameters collection path. ParameterReference identifies the original parameter. Capability references identify IDTA Capability elements; Skill identifies an offered skill catalog entry. Binding sources identify process parameters; an absent source uses the constant Value (including an explicit empty string). Reference bindings omit the inactive Value. SourceAas defaults to Subject. Skill is authoritative; the inspector selects its catalog entry by reference, without persisting a second identifier. A nonempty legacy SkillId without a reference is retained until reassigned, so unresolved older assignments are not silently discarded. Empty Bindings and Outputs are omitted. Explicit empty requirement/material overrides remain meaningful and are preserved. NodeId is stable identity, while Name is an editable label; they are not interchangeable.
 
 ## Defaults and overrides
 
@@ -48,11 +51,11 @@ Operations resolve the current Process Parameters definition. Unchanged paramete
 
 Parameter edits in the editor affect the sequence override, not the Process Parameters source. Reopening a plan follows updated source defaults for values without overrides. Legacy snapshot values that differ from current defaults become overrides during migration. Removed parameters and changed datatypes/units require reconciliation before migration. This is a live authoring model; it is not a frozen batch recipe or execution record.
 
-A save compares loaded sequence documents and resolved process sources against the repository. Conflicts require reload. Dependencies are saved before their parent; failed writes retain the remaining edits for retry. These checks are optimistic, not atomic repository transactions. Other assets' sequences are checked in their own editing session. Primary sequences are discovered by semantic ID and Role; the generated ID convention is only a fallback, not the reference contract. Multiple primary candidates are rejected as ambiguous.
+A save compares loaded sequence documents and resolved process sources against the repository. Conflicts require reload. All local definitions are saved in one owner submodel; failed writes retain the remaining edits for retry. These checks are optimistic, not atomic repository transactions. Other assets' sequences are checked in their own editing session. Primary sequences are discovered by semantic ID and Role; the generated ID convention is only a fallback, not the reference contract. Multiple primary candidates are rejected as ambiguous.
 
 ## Migration
 
-The reader accepts older structured ProductionSequence 1.0 and legacy JSON Definition attachments. On save it writes local 2.0 documents and direct references, preserving authored values, stable step IDs, control flow and assignments. Existing attachment backups remain available but are no longer authoritative. The demo seeder backs up old definitions before migration and preserves edited demo recipes. Source Process Parameters, Hierarchical Structures and Capability Description schemas are unchanged.
+The reader accepts separate ProductionSequence 2.0 documents, older structured 1.0 and legacy JSON Definition attachments. On save it writes one 3.0 submodel per owner, preserving authored values, stable step IDs, control flow and assignments. After the owner document is saved, legacy local-subprocess links are detached from the owner AAS. Their repository documents remain available for existing external references. Existing attachment backups remain available but are no longer authoritative. The demo seeder backs up old definitions before migration and preserves edited demo recipes. Source Process Parameters, Hierarchical Structures and Capability Description schemas are unchanged.
 
 ## Matching convention
 
@@ -75,7 +78,7 @@ A decision has exactly two ordered branches: Order 0 is Yes and Order 1 is No. B
 | --- | --- |
 | Condition | ConditionType=`comparison`, Operator, Unit, Expected; optional Operand for an unfinished draft |
 | Expected | DataType=`boolean`, `number` or `string`; Value typed `xs:boolean`, `xs:double` or `xs:string` respectively |
-| Operand, OperandType=`parameter` | StepId and the paired SourceAas/SourceElement references identifying an effective parameter in that operation |
+| Operand, OperandType=`parameter` | StepId and the SourceElement reference and optional SourceAas identifying an effective parameter in that operation |
 | Operand, OperandType=`output` | StepId and OutputId identifying an operation output within the same scope |
 | Operation Outputs | Zero or more Output collections containing OutputId, Name, DataType and Unit |
 
@@ -83,7 +86,7 @@ Operators are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`. Ordered comparisons require 
 
 Operation outputs are declarations, not execution values. Preview results are scoped to each invocation and stay in browser component state. An output may be referenced after its operation, within its branch, and after an all-branches parallel join. A sibling parallel branch cannot consume it before the join. Outputs introduced inside decisions or optional flows cannot escape their selected-path merge until explicit merge mappings are implemented. Calls isolate output values; cross-subprocess mappings are not yet supported. A condition can read an effective parameter as a definition input independently of when that operation runs.
 
-All these flow shapes are supported by `production-sequence/2.0`. Unsupported schema values and unknown condition/node types are rejected rather than silently dropped.
+All these flow shapes are supported by Production Sequence 3.0. Unsupported semantic contract versions and unknown condition/node types are rejected rather than silently dropped.
 
 Empty comparison operands are valid incomplete drafts. General expressions, event subscriptions, repeated execution, resource allocation, live measurements and execution history are outside this version's contract.
 
@@ -128,3 +131,9 @@ or a material balance. Missing step allocations remain unallocated even when the
 
 BoM counts are live display metadata. They are loaded again with Reload plans and are not copied into
 Production Sequence documents or inferred as material overrides.
+
+## AAS conventions
+
+Semantic IDs describe meaning using ExternalReference / GlobalReference; they do not locate instances. ModelReferences locate instances using a globally identified Submodel followed by each nested element's idShort and key type. Readers identify fields by semantic ID, so a renamed idShort works when reference paths are updated. Collections have unique idShort values. Steps and branches keep explicit Order because SubmodelElementCollection array order has no execution meaning. SequenceId and NodeId preserve editor identities independently of labels and collection placement. The AAS SDK verifies the generated structure; repository tests verify reference resolution and round trips. These checks do not make this project-owned contract a published IDTA template.
+
+See the [AAS metamodel's submodel element definitions](https://industrialdigitaltwin.io/aas-specifications/IDTA-01001/v3.1.2/spec-metamodel/submodel-elements.html).

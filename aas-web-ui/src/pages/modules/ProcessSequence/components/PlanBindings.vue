@@ -20,11 +20,11 @@
       :disabled="!node.resourceAasId || loading"
       hide-details="auto"
       item-title="name"
-      item-value="idShort"
-      :items="skills"
+      item-value="key"
+      :items="skillOptions"
       label="Resource skill"
       :loading="loading"
-      :model-value="node.skillId"
+      :model-value="selectedSkill"
       @update:model-value="bindSkill"
     />
 
@@ -68,6 +68,11 @@
   const error = ref('')
   const { loadSkills } = usePlanSources()
   let request = 0
+  const skillKey = (skill: SkillDefinition) => JSON.stringify(skill.reference?.keys.map(key => key.value) ?? [skill.idShort])
+  const skillOptions = computed(() => skills.value.map(skill => ({ ...skill, key: skillKey(skill) })))
+  const selectedSkill = computed(() => node.value.skillReference
+    ? JSON.stringify(node.value.skillReference.keys.map(key => key.value))
+    : skillOptions.value.find(skill => skill.idShort === node.value.skillId)?.key ?? '')
   const parameterOptions = computed(() => [
     { title: 'Constant', value: '' },
     ...(node.value.process?.parameters ?? []).map(parameter => ({
@@ -103,10 +108,11 @@
     node.value.bindings = []
   }
 
-  function bindSkill (id: string): void {
-    node.value.skillId = id
-    node.value.skillReference = skills.value.find(skill => skill.idShort === id)?.reference
-    node.value.bindings = (skills.value.find(skill => skill.idShort === id)?.parameters ?? []).map(parameter => ({
+  function bindSkill (key: string): void {
+    const skill = skillOptions.value.find(skill => skill.key === key)
+    node.value.skillId = skill?.idShort ?? ''
+    node.value.skillReference = skill?.reference
+    node.value.bindings = (skill?.parameters ?? []).map(parameter => ({
       name: parameter.idShort, source: null, value: String(parameter.defaultValue ?? ''),
     }))
   }

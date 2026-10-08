@@ -5,8 +5,8 @@ ProductionSequence submodel. A parent calls the child's sequence through a direc
 opening the child separately edits the same definition. The BoM supplies the physical hierarchy.
 
 The [Production Sequence contract](../aas-web-ui/src/pages/modules/ProcessSequence/templates/README.md)
-is the authoritative description of the stored structure and migration. It uses PlanSchema
-`production-sequence/2.0`. Earlier scope-based and JSON definitions are read for compatibility.
+is the authoritative description of the stored structure and migration. It uses submodel semantic version
+`ProductionSequence/3/0`. Earlier scope-based and JSON definitions are read for compatibility.
 
 ## Ownership
 
@@ -16,8 +16,8 @@ sequence starts empty; an explicitly referenced but missing definition is an err
 Description supplies additional required/offered capability information for matching.
 
 Each sequence stores only its own Steps and direct references. Process-only subprocesses are
-separate submodels attached to the same owner AAS, cataloged under Subprocesses. Calls reuse those
-definitions. There are no persisted Scopes, ParentScope or RootScope fields in the current contract.
+nested collections under Subprocesses in the same owner submodel. Calls reference those
+collection paths and reuse the definitions. There are no persisted Scopes, ParentScope or RootScope fields in the current contract.
 The editor composes an in-memory scope tree for navigation and editing.
 
 ## Editing and persistence

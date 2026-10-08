@@ -1,12 +1,14 @@
 import type { ProcessPlan, StepNode } from '../types/plan'
 import type { AasElement } from './sequenceModel'
-import { jsonization } from '@aas-core-works/aas-core3.1-typescript'
+import { jsonization, verification } from '@aas-core-works/aas-core3.1-typescript'
 import { describe, expect, it } from 'vitest'
 import { buildPharmaDemo } from '../demo/pharma'
 import { flattenNodes, newPlan, parsePlan } from './plan'
 import { readPlanProcesses } from './planSources'
 import { buildSequenceDocuments, DOCUMENT_SEMANTIC_ID, readSequenceDocuments } from './sequenceDocuments'
+import { buildSequenceDocuments as buildV2 } from './sequenceDocumentsV2'
 import { buildSequenceSubmodel, children, collection, field, modelRef, readSequenceSubmodel, ref } from './sequenceModel'
+import { packSequence } from './sequencePacking'
 
 const demo = buildPharmaDemo(id => `${id}/sequence`)
 const original = demo.plans.find(plan => plan.productAasId.endsWith('/vial-2ml'))!
@@ -26,12 +28,16 @@ describe('locally owned sequence documents', () => {
     const documents = buildSequenceDocuments(original, 'urn:vial:sequence', processes)
     expect(documents).toHaveLength(1)
     const model = documents[0]!
-    expect(jsonization.submodelFromJsonable(model as never).error).toBeNull()
+    const parsed = jsonization.submodelFromJsonable(model as never)
+    expect(parsed.error).toBeNull()
+    expect([...verification.verify(parsed.mustValue())].map(error => `${error.path}: ${error.message}`)).toEqual([])
     expect(field(model, 'Scopes')).toBeUndefined()
     expect(field(model, 'RootScope')).toBeUndefined()
     expect(children(model, 'Steps')).toHaveLength(8)
     for (const step of children(model, 'Steps')) {
       expect(field(step, 'Process')).toBeUndefined()
+      expect(field(step, 'ProcessOwner')).toBeUndefined()
+      expect(field(step, 'SkillId')).toBeUndefined()
       expect(field(step, 'ProcessReference')).toBeDefined()
       expect(field(step, 'ParameterOverrides')).toBeUndefined()
       expect(field(step, 'RequiredCapabilities')).toBeUndefined()
@@ -97,12 +103,68 @@ describe('locally owned sequence documents', () => {
     plan.scopes.push({ id: 'prepare', name: 'Prepare', parentId: 'product', material: null, nodes: [{ id: 'job', kind: 'step', name: 'Mix', process: null, resourceAasId: '', skillId: '', bindings: [] }] }, { id: 'unused', name: 'Unused draft', parentId: 'prepare', material: null, nodes: [] })
     plan.scopes[0]!.nodes = [{ id: 'first', kind: 'call', name: 'Prepare first', scopeId: 'prepare' }, { id: 'second', kind: 'call', name: 'Prepare second', scopeId: 'prepare' }]
     const documents = buildSequenceDocuments(plan, 'urn:primary', [])
-    const models = new Map(documents.map(model => [model.id, model]))
-    expect(documents).toHaveLength(3)
-    expect(children(documents[0]!, 'Subprocesses')).toHaveLength(1)
-    expect(children(documents[1]!, 'Subprocesses')).toHaveLength(1)
-    const loaded = await readSequenceDocuments(documents[0]!, async id => clone(models.get(id)!))
+    expect(documents).toHaveLength(1)
+    const root = documents[0]!
+    const nested = children(root, 'LocalSubprocesses')
+    expect(nested).toHaveLength(1)
+    expect(children(nested[0]!, 'LocalSubprocesses')).toHaveLength(1)
+    expect(field(nested[0]!, 'Subject')).toBeUndefined()
+    const target = field(children(root, 'Steps')[0]!, 'SequenceReference')!.value
+    expect(target.keys).toEqual([
+      { type: 'Submodel', value: root.id },
+      { type: 'SubmodelElementCollection', value: 'Subprocesses' },
+      { type: 'SubmodelElementCollection', value: nested[0]!.idShort },
+    ])
+    expect([...verification.verify(jsonization.submodelFromJsonable(root as never).mustValue())].map(error => `${error.path}: ${error.message}`)).toEqual([])
+    const loaded = await readSequenceDocuments(root, load)
+    const old = buildV2(plan, 'urn:primary', [])
+    const migrated = await readSequenceDocuments(old[0]!, async id => clone(old.find(model => model.id === id)!))
+    expect(buildSequenceDocuments(migrated, 'urn:primary', [])).toEqual(documents)
+    // Semantic meaning survives idShort changes when reference paths are updated.
+    field(root, 'LocalSubprocesses')!.idShort = 'Definitions'
+    for (const step of children(root, 'Steps')) {
+      field(step, 'SequenceReference')!.value.keys[1].value = 'Definitions'
+    }
+    expect((await readSequenceDocuments(root, load)).scopes.map(scope => scope.nodes)).toEqual(loaded.scopes.map(scope => scope.nodes))
+    target.keys.at(-1).value = 'Missing'
+    await expect(readSequenceDocuments(root, load)).rejects.toThrow('could not be resolved')
     expect(parsePlan(JSON.stringify(loaded), plan.productAasId).scopes.map(scope => scope.nodes)).toEqual(plan.scopes.map(scope => scope.nodes))
+  })
+
+  it('preserves explicit clears, constants, foreign owners and reference-based skill identity', async () => {
+    const plan = clone(original)
+    const operation = plan.scopes[0]!.nodes[2] as StepNode
+    operation.requiredCapabilities = []
+    operation.process!.material = []
+    operation.bindings.push({ name: 'empty', value: '', source: null }, { name: 'zero', value: '0', source: null })
+    operation.skillId = 'obsolete cached identity'
+    const root = buildSequenceDocuments(plan, 'urn:primary', processes)[0]!
+    const step = children(root, 'Steps')[2]!
+    expect(field(step, 'SkillId')).toBeUndefined()
+    expect(field(step, 'RequiredCapabilities')).toBeDefined()
+    expect(field(step, 'MaterialOverrides')).toBeDefined()
+    const binding = children(step, 'Bindings').find(binding => field(binding, 'SourceElement'))!
+    expect(field(binding, 'Value')).toBeUndefined()
+    expect(field(binding, 'SourceAas')).toBeUndefined()
+    const restored = (await readSequenceDocuments(root, load)).scopes[0]!.nodes[2] as StepNode
+    expect(restored.skillId).toBe('')
+    expect(restored.skillReference).toEqual(operation.skillReference)
+    expect(restored.bindings).toEqual(operation.bindings)
+    expect(restored.requiredCapabilities).toEqual([])
+    expect(restored.process!.material).toEqual([])
+    plan.productAasId = 'urn:another-owner'
+    const foreign = children(buildSequenceDocuments(plan, 'urn:foreign', processes)[0]!, 'Steps')[2]!
+    expect(field(foreign, 'ProcessOwner')).toBeDefined()
+    expect(field(children(foreign, 'Bindings')[0]!, 'SourceAas')).toBeDefined()
+  })
+
+  it('finds the primary independently of array order and rejects disconnected definitions', () => {
+    const plan = newPlan('urn:product', 'P')
+    plan.scopes.unshift({ id: 'child', name: 'Child', parentId: 'product', material: null, nodes: [] })
+    const documents = buildV2(plan, 'urn:primary', [])
+    expect(packSequence(documents).id).toBe('urn:primary')
+    plan.scopes[0]!.parentId = 'missing'
+    expect(() => buildSequenceDocuments(plan, 'urn:primary', [])).toThrow('disconnected')
   })
 
   it('references an external component sequence without copying its steps', async () => {
@@ -118,12 +180,13 @@ describe('locally owned sequence documents', () => {
   })
 
   it('refuses missing references, containment cycles and unknown schema versions', async () => {
-    const model = buildSequenceDocuments(newPlan('urn:p', 'P'), 'urn:primary', [])[0]!
+    const model = buildV2(newPlan('urn:p', 'P'), 'urn:primary', [])[0]!
     model.submodelElements.push(collection('Subprocesses', [ref('Child', modelRef([{ type: 'Submodel', value: model.id }]), 'SequenceReference')]))
     await expect(readSequenceDocuments(model, load)).rejects.toThrow('cycle')
     model.submodelElements.pop()
     field(model, 'PlanSchema')!.value = 'production-sequence/999.0'
     await expect(readSequenceDocuments(model, load)).rejects.toThrow('incompatible')
-    expect(model.semanticId.keys[0].value).toBe(DOCUMENT_SEMANTIC_ID)
+    model.semanticId.keys[0].value = DOCUMENT_SEMANTIC_ID
+    await expect(readSequenceDocuments(model, load)).rejects.toThrow('incompatible')
   })
 })

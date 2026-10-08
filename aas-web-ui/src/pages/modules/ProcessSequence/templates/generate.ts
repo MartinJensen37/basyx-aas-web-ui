@@ -28,13 +28,13 @@ plan.scopes = [
   ] },
   { id: 'subprocess', name: 'Subprocess', parentId: 'product', material: null, nodes: [] },
 ]
-const templates = buildSequenceDocuments(plan, 'https://smartproductionlab.aau.dk/templates/ProductionSequence/2/0', baseline ? [baseline] : [])
-const optional = new Set(['Component', 'Subprocesses', 'ParameterOverrides', 'MaterialOverrides', 'ProcessOwner', 'ProcessReference', 'SequenceReference', 'OccurrenceId', 'RequiredCapabilities', 'Resource', 'Skill', 'ExecutionMode', 'SourceAas', 'SourceElement', 'Outputs', 'Operand'])
-const repeatable = new Set(['SequenceReference', 'Step', 'Branch', 'ParameterOverride', 'Binding', 'RequiredCapability', 'Output'])
+const templates = buildSequenceDocuments(plan, 'https://smartproductionlab.aau.dk/templates/ProductionSequence/3/0', baseline ? [baseline] : [])
+const optional = new Set(['Component', 'LocalSubprocesses', 'Bindings', 'SkillId', 'ParameterOverrides', 'MaterialOverrides', 'ProcessOwner', 'ProcessReference', 'SequenceReference', 'OccurrenceId', 'RequiredCapabilities', 'Resource', 'Skill', 'ExecutionMode', 'SourceAas', 'SourceElement', 'Outputs', 'Operand'])
+const repeatable = new Set(['SubprocessDefinition', 'Step', 'Branch', 'ParameterOverride', 'Binding', 'RequiredCapability', 'Output'])
 function annotate (element: Record<string, any>, parentMeaning = ''): void {
   const name = String(element.semanticId?.keys?.[0]?.value ?? '').replace('https://smartproductionlab.aau.dk/ProductionSequence/', '').replace('/1/0', '')
   if (element.modelType !== 'Submodel' && element.semanticId?.keys?.[0]?.value === sequenceSemantic(name)) {
-    const isOptional = optional.has(name) || (name === 'Unit' && parentMeaning === 'ParameterOverride')
+    const isOptional = optional.has(name) || (name === 'Unit' && parentMeaning === 'ParameterOverride') || (name === 'Value' && parentMeaning === 'Binding')
     element.qualifiers = [{ type: 'SMT/Cardinality', kind: 'TemplateQualifier', valueType: 'xs:string', value: repeatable.has(name) ? 'ZeroToMany' : (isOptional ? 'ZeroToOne' : 'One'), semanticId: { type: 'ExternalReference', keys: [{ type: 'GlobalReference', value: 'https://admin-shell.io/SubmodelTemplates/Cardinality/1/0' }] } }]
   }
   for (const child of element.submodelElements ?? (Array.isArray(element.value) ? element.value : [])) {
@@ -43,7 +43,7 @@ function annotate (element: Record<string, any>, parentMeaning = ''): void {
 }
 for (const template of templates) {
   template.kind = 'Template'
-  template.description = [{ language: 'en', text: 'Application Production Sequence 2.0. See README.md for cardinalities, conditional node shapes, ownership and matching rules. Example values are illustrative defaults, not production prescriptions.' }]
+  template.description = [{ language: 'en', text: 'Application Production Sequence 3.0. See README.md for cardinalities, conditional node shapes, ownership and matching rules. Example values are illustrative defaults, not production prescriptions.' }]
   annotate(template)
   writeFileSync(new URL(`${template.idShort}.json`, import.meta.url), JSON.stringify(template, null, 2) + '\n')
 }
