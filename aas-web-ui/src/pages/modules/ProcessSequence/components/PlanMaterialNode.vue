@@ -14,6 +14,8 @@
         <v-card-text v-if="data.material">
           <p class="mb-2">{{ data.subtitle }} at {{ data.operationName }}: {{ materialAmount(data.material) }}</p>
           <p v-if="data.material.role === 'workpiece'" class="text-body-small mb-3">This is the item being processed. It is not an additional component consumed at every step.</p>
+          <p v-if="data.material.bomCount !== undefined" class="text-body-small mb-3">BoM: {{ data.material.bomCount }} pieces in this occurrence. This count belongs to its immediate assembly; it does not allocate components between steps.</p>
+          <p v-if="!data.material.quantity && data.material.bomCount !== undefined" class="text-body-small mb-3">Quantity at this step has not been allocated.</p>
           <v-alert v-if="data.material.warning" class="mb-3" density="compact" type="info">{{ data.material.warning }}</v-alert>
 
           <div v-if="data.material.reference" class="text-body-small text-break">

@@ -35,7 +35,15 @@ describe('pharma recipes and structured sequence', () => {
       const model = buildSequenceSubmodel(plan, `${plan.productAasId}/sequence`)
       expect(jsonization.submodelFromJsonable(model as never).error).toBeNull()
       const loaded = parsePlan(JSON.stringify(readSequenceSubmodel(model)), plan.productAasId)
-      expect(loaded).toEqual(parsePlan(JSON.stringify(plan), plan.productAasId))
+      // Live BoM metadata is resolved separately and is not stored in a sequence.
+      const definition = structuredClone(plan)
+      for (const scope of definition.scopes) {
+        if (scope.material) {
+          delete scope.material.bulkCount
+          delete scope.material.bulkCountWarning
+        }
+      }
+      expect(loaded).toEqual(parsePlan(JSON.stringify(definition), plan.productAasId))
       expect(model.submodelElements.some((element: { modelType: string }) => element.modelType === 'File')).toBe(false)
     }
   })

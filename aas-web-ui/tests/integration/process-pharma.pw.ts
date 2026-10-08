@@ -338,7 +338,46 @@ test('shows recipe materials automatically, with per-cycle quantities and part n
   await page.getByRole('button', { name: `Material ${stopper} at Stoppering \u2014 dose 2`, exact: true }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText('Product / Part_1', { exact: true })).toBeVisible()
+  await expect(dialog.getByText(/^BoM: 2 pieces in this occurrence/)).toBeVisible()
   await dialog.getByRole('button', { name: 'Open part sequence', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'Sequence name', exact: true })).toHaveValue(stopper)
   await expect(page.getByRole('button', { name: /^Material / })).toHaveCount(0)
+})
+
+test('shows the BoM count for an unallocated material link and refreshes it after BoM edits', async ({ page, request }) => {
+  const owner = `${prefix}/aas/syringe-two-dose`
+  const recipe = PHARMA_RECIPES.find(recipe => recipe.volume.length === 2)!
+  const source = fixture.submodels.find(model => model.id === `${prefix}/sm/syringe-two-dose/parameters`)!
+  const bom = fixture.submodels.find(model => model.id === `${prefix}/sm/syringe-two-dose/bom`)!
+  const edited = structuredClone(source)
+  const process = edited.submodelElements[0].value.find((item: any) => item.value.some((field: any) => field.idShort === 'ProcessId' && field.value === 'Stoppering_1'))
+  const materials = process.value.find((item: any) => item.idShort === 'ProcessBoM')
+  const index = materials.value.findIndex((item: any) => item.value.some((field: any) => field.idShort === 'Role' && field.value === 'incorporated'))
+  const material = materials.value[index]
+  materials.value[index] = { modelType: 'ReferenceElement', idShort: material.idShort, value: material.value.find((item: any) => item.idShort === 'MaterialReference').value }
+  const endpoint = (id: string) => `${repository}/submodels/${encode(id)}`
+  try {
+    expect((await request.put(endpoint(source.id), { data: edited })).ok()).toBe(true)
+    await openWorkspace(page)
+    const picker = page.getByRole('combobox', { name: 'Product to plan', exact: true })
+    await expect(picker).toBeEnabled({ timeout: 60_000 })
+    await picker.fill(recipe.name)
+    await page.getByRole('option', { name: recipe.name, exact: true }).click()
+    const node = page.getByRole('button', { name: `Material ${recipe.stopper} mm rubber stopper at Stoppering \u2014 dose 1`, exact: true })
+    await expect(node).toContainText('Linked material')
+    await expect(node).toContainText('BoM: 2 pieces')
+    await node.click()
+    await expect(page.getByRole('dialog').getByText('Quantity at this step has not been allocated.', { exact: true })).toBeVisible()
+    await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
+    const updatedBom = structuredClone(bom)
+    updatedBom.submodelElements[0].statements.find((item: any) => item.idShort === 'Part_1').statements[0].value = '3'
+    expect((await request.put(endpoint(bom.id), { data: updatedBom })).ok()).toBe(true)
+    await page.getByRole('button', { name: 'Reload plans', exact: true }).click()
+    await expect(node).toContainText('BoM: 3 pieces')
+    const stored = await (await request.get(endpoint(planId(owner)))).json()
+    expect(JSON.stringify(stored)).not.toContain('BulkCount')
+  } finally {
+    expect((await request.put(endpoint(source.id), { data: source })).ok()).toBe(true)
+    expect((await request.put(endpoint(bom.id), { data: bom })).ok()).toBe(true)
+  }
 })

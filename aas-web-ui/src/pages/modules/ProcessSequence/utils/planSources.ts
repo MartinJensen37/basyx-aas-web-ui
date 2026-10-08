@@ -1,6 +1,7 @@
 import type { PlanParameter, PlanProcess, PlanScope, SourceReference } from '../types/plan.ts'
 import { PROCESS_STEP_CAPABILITY_SEMANTIC_ID, processParameterSemantic } from '../constants/contracts.ts'
 import { capabilityReferenceSchema } from '../types/plan.ts'
+import { readBulkCount } from './bulkCount.ts'
 
 type Element = Record<string, any>
 
@@ -43,7 +44,7 @@ export function readMaterialScopes (submodel: Element, aasId: string, rootId: st
       const id = JSON.stringify([rootId, submodel.id, next])
       scopes.push({
         id, name: label(child), parentId, nodes: [],
-        material: { aasId, submodelId: submodel.id, path: next, globalAssetId: child.globalAssetId ?? '' },
+        material: { aasId, submodelId: submodel.id, path: next, globalAssetId: child.globalAssetId ?? '', ...readBulkCount(child) },
       })
       visit(child, id, next)
     }

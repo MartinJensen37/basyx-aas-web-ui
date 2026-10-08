@@ -8,13 +8,19 @@ export interface MaterialUse {
   id: string
   name: string
   role: MaterialRole
+  bomCount?: string
   quantity: string
   unit: string
   reference?: SourceReference
   scopeId?: string
   warning?: string
 }
-export const materialAmount = (material: MaterialUse) => material.quantity ? `${material.quantity}${material.unit ? ` ${material.unit}` : ''}` : 'Quantity unspecified'
+export function materialAmount (material: MaterialUse): string {
+  if (material.quantity) {
+    return `${material.quantity}${material.unit ? ` ${material.unit}` : ''}`
+  }
+  return material.bomCount === undefined ? 'Quantity unspecified' : `BoM: ${material.bomCount} pieces`
+}
 const elements = (model: AasElement): AasElement[] => Array.isArray(model.value) ? model.value : []
 const field = (model: AasElement, name: string) => elements(model).find(item => item.semanticId?.keys?.[0]?.value === materialSemantic(name))
 const referencePath = (reference: AasElement) => reference?.keys?.map((key: { value: string }) => key.value) ?? []
@@ -62,7 +68,7 @@ export function readMaterialUses (process: PlanProcess, scopes: PlanScope[] = []
     }
     return [{
       id: String(index), name: scope?.name ?? materialName(entry, path),
-      role, quantity, unit, scopeId: scope?.id, warning,
+      role, quantity, unit, bomCount: scope?.material?.bulkCount, scopeId: scope?.id, warning: [warning, scope?.material?.bulkCountWarning].filter(Boolean).join(' ') || undefined,
       reference: path.length > 0 ? { aasId: process.source.aasId, submodelId: path[0], path: path.slice(1) } : undefined,
     }]
   })

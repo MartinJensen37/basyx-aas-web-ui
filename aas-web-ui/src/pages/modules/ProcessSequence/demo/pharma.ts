@@ -1,5 +1,6 @@
 import type { PlanNode, PlanProcess, ProcessPlan, StepNode } from '../types/plan.ts'
 import { HIERARCHICAL_STRUCTURES_SUBMODEL, PROCESS_PARAMETERS_SUBMODEL, PROCESS_STEP_CAPABILITY_SEMANTIC_ID, processParameterSemantic, SKILLS_SUBMODEL_SEMANTIC_ID, skillSemantic } from '../constants/contracts.ts'
+import { BULK_COUNT_SEMANTIC_ID, readBulkCount } from '../utils/bulkCount.ts'
 import { materialUse } from '../utils/materials.ts'
 import { readPlanProcesses } from '../utils/planSources.ts'
 import { buildSequenceDocuments } from '../utils/sequenceDocuments.ts'
@@ -130,7 +131,9 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
     for (const part of parts) {
       emptyPart(part.id, part.name, part.specs)
     }
-    const entities = parts.map((part, index) => ({ modelType: 'Entity', idShort: `Part_${index}`, displayName: [{ language: 'en', text: part.name }], entityType: 'SelfManagedEntity', globalAssetId: `${PHARMA_BASE}/asset/${part.id}`, statements: [property('Quantity', part.quantity), property('QuantityUnit', part.id.startsWith('demo-liquid') ? 'mL' : 'piece')] }))
+    const entities = parts.map((part, index) => ({ modelType: 'Entity', idShort: `Part_${index}`, displayName: [{ language: 'en', text: part.name }], entityType: 'SelfManagedEntity', globalAssetId: `${PHARMA_BASE}/asset/${part.id}`, statements: part.id.startsWith('demo-liquid')
+      ? [property('Quantity', part.quantity), property('QuantityUnit', 'mL')]
+      : [property('BulkCount', part.quantity, BULK_COUNT_SEMANTIC_ID, 'xs:unsignedLong')] }))
     submodels.push(submodel(bomId, 'HierarchicalStructures', HIERARCHICAL_STRUCTURES_SUBMODEL.semanticId, [{ modelType: 'Entity', idShort: 'Product', entityType: 'SelfManagedEntity', globalAssetId: `${PHARMA_BASE}/asset/${recipe.id}`, semanticId: sem(HIERARCHICAL_STRUCTURES_SUBMODEL.entryNodeSemanticId), statements: entities }]))
     const sequence = ['Unpacking', 'Loading', ...recipe.volume.flatMap((_, index) => [`Filling_${index + 1}`, `Stoppering_${index + 1}`]), ...(recipe.format === 'vial' ? ['Capping'] : []), 'Inspection', 'Unloading', 'Packing']
     const processes: unknown[] = []
@@ -202,7 +205,7 @@ export function buildPharmaDemo (planId: (aasId: string) => string) {
       : node)
     savePlan({ schema: 'process-sequence-plan/5.0', productAasId: aas(recipe.id), revision: 1, rootScopeId: 'product', scopes: [
       { id: 'product', name: recipe.name, parentId: null, material: null, nodes: plannedNodes },
-      ...parts.map((part, index) => ({ id: `part-${index}`, name: part.name, parentId: 'product', nodes: [], planAasId: aas(part.id), material: { aasId: aas(recipe.id), submodelId: bomId, path: ['Product', `Part_${index}`], globalAssetId: `${PHARMA_BASE}/asset/${part.id}` } })),
+      ...parts.map((part, index) => ({ id: `part-${index}`, name: part.name, parentId: 'product', nodes: [], planAasId: aas(part.id), material: { aasId: aas(recipe.id), submodelId: bomId, path: ['Product', `Part_${index}`], globalAssetId: `${PHARMA_BASE}/asset/${part.id}`, ...readBulkCount(entities[index]) } })),
     ] })
     shell(recipe.id, recipe.name, [bomId, sm(recipe.id, 'parameters'), sm(recipe.id, 'capabilities'), planId(aas(recipe.id))])
   }

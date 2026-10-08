@@ -101,7 +101,10 @@ export const planSchema = z.object({
   linkedRevisions: z.record(z.string(), z.number().int().nonnegative()).optional(),
   scopes: z.array(z.object({
     id: z.string().min(1), name: z.string(), parentId: z.string().nullable(),
-    material: sourceSchema.extend({ globalAssetId: z.string() }).nullable(),
+    material: sourceSchema.extend({ globalAssetId: z.string(),
+      /** Live BoM metadata for display; sequence documents store only the occurrence reference. */
+      bulkCount: z.string().optional(), bulkCountWarning: z.string().optional(),
+    }).nullable(),
     /** This occurrence uses the root sequence owned by another product/assembly AAS. */
     planAasId: z.string().min(1).optional(),
     /** Actual persisted sequence ID; scopes themselves are only an editor projection. */

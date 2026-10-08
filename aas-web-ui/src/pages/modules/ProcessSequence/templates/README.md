@@ -101,6 +101,30 @@ ProcessBoM remains the source of operation material requirements. Its optional a
 
 Use either Quantity/Unit or QuantityParameterReference. For a reusable process in two filling cycles, each invocation resolves its own effective volume. Each stoppering cycle uses one stopper even when the overall BoM lists two. Workpiece indicates the existing item being processed; it must not be counted as a newly consumed part at each operation. Produced material is separate from measured operation Outputs.
 
-The graph derives material cards and edges at runtime. Added components and consumables point into the operation, produced materials point out, and workpieces use neutral connections without consumption arrows. Legacy plain references appear as Linked material with unspecified quantity. Names resolve from the mounted BoM occurrences, with displayName/path fallbacks. Clicking a material shows its occurrence and opens the part's sequence when available. Hide materials only changes the view.
+The graph derives material cards and edges at runtime. Added components and consumables point into the operation, produced materials point out, and workpieces use neutral connections without consumption arrows. Legacy plain references appear as Linked material. If the referenced BoM occurrence declares BulkCount, the card shows that count explicitly labelled BoM; it does not become a per-step consumption quantity. Names resolve from the mounted BoM occurrences, with displayName/path fallbacks. Clicking a material shows its occurrence and opens the part's sequence when available. Hide materials only changes the view.
 
 The same roles and quantities appear under Process inputs / Process materials. Sequence storage inherits ProcessBoM and only persists MaterialOverrides when requirements differ. Layout positions, resolved labels and material graph edges are never saved in the sequence. The diagram is an authoring view; it does not calculate inventory, material balances, lot traceability or implicit dependencies between branches.
+
+### BoM count versus operation quantity
+
+The reader resolves `https://admin-shell.io/idta/HierarchicalStructures/BulkCount/1/0` on the referenced
+Entity by semantic ID. It accepts a single `xs:unsignedLong` Property and preserves integer precision,
+including zero. Missing counts stay unknown; invalid counts produce a diagnostic. Counts refer to the
+specific occurrence, not every occurrence of the same asset. Parent counts are not multiplied into
+material cards. The current tree reader follows nested Entity statements; it does not reconstruct an
+arbitrary HasPart/IsPartOf relationship graph.
+
+[IDTA 02011-1-1, pages 11 and 18](https://industrialdigitaltwin.org/en/wp-content/uploads/sites/2/2024/06/IDTA-02011-1-1_Submodel_HierarchicalStructuresEnablingBoM.pdf)
+restricts BulkCount to type assets. It is a component multiplicity, not a mass or volume. Pharma solids
+use BulkCount; liquid quantities retain their domain units. The demo migration converts only known
+legacy piece counts and preserves their edited values and any existing standard count.
+
+ProcessBoM identifies the material occurrence participating in a process. Production Sequence invokes
+that process at a particular position. MaterialUse adds its role and per-invocation allocation; it is an
+application extension. Explicit Quantity or QuantityParameterReference takes precedence on the card.
+The details dialog also shows the BoM count. For two stoppers used in separate cycles, BulkCount is 2
+and each Stoppering operation allocates 1. A plain link alone cannot establish this split, consumption,
+or a material balance. Missing step allocations remain unallocated even when the BoM count is known.
+
+BoM counts are live display metadata. They are loaded again with Reload plans and are not copied into
+Production Sequence documents or inferred as material overrides.

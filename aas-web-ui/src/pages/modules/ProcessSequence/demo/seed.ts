@@ -1,6 +1,7 @@
 import type { PlanProcess, PlanScope, ProcessPlan, StepNode } from '../types/plan.ts'
 import { Buffer } from 'node:buffer'
 import { HIERARCHICAL_STRUCTURES_SUBMODEL, PROCESS_PARAMETERS_SUBMODEL, PROCESS_STEP_CAPABILITY_SEMANTIC_ID, processParameterSemantic, SKILLS_SUBMODEL_SEMANTIC_ID } from '../constants/contracts.ts'
+import { upgradeDemoBulkCounts } from '../utils/bulkCount.ts'
 import { materialSemantic, upgradeMaterialUses } from '../utils/materials.ts'
 import { readPlanProcesses } from '../utils/planSources.ts'
 import { extractAssembly } from '../utils/planTree.ts'
@@ -291,9 +292,13 @@ export async function seedDemo (repository: string): Promise<void> {
     const existing = await fetch(`${target}/${collection}/${encode(model.id)}`)
     if (existing.ok) {
       const current = await existing.json() as Record<string, any>
-      if (collection === 'submodels' && model.idShort === 'ProcessParameters') {
+      if (collection === 'submodels' && ['ProcessParameters', 'HierarchicalStructures'].includes(model.idShort)) {
         const before = canonical(current)
-        upgradeDemoInputs(current, model)
+        if (model.idShort === 'ProcessParameters') {
+          upgradeDemoInputs(current, model)
+        } else {
+          upgradeDemoBulkCounts(current)
+        }
         if (canonical(current) !== before) {
           const updated = await fetch(`${target}/${collection}/${encode(model.id)}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(current),
@@ -301,7 +306,7 @@ export async function seedDemo (repository: string): Promise<void> {
           if (!updated.ok) {
             throw new Error(`Updating demo input semantics: HTTP ${updated.status}`)
           }
-          console.log(`Updated semantic IDs and capability links for ${model.id}`)
+          console.log(`Updated demo input semantics for ${model.id}`)
         }
       }
       if (collection === 'shells') {
