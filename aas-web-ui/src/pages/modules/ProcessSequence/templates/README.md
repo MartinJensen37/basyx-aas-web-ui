@@ -72,11 +72,12 @@ EveryNProducts must be an integer from 1 to 9007199254740991; 1 means every prod
 
 ## Typed decisions and optional flows
 
-A decision has exactly two ordered branches: Order 0 is Yes and Order 1 is No. Branch names are labels, not executable expressions. Evaluate once, execute exactly one branch, then merge that selected path. Conditional nodes keep their existing body/skip structure. Either node can use a periodic condition or the following comparison condition:
+A decision has exactly two ordered branches: Order 0 is Yes and Order 1 is No. Branch names are labels, not executable expressions. Evaluate once, execute exactly one branch, then merge that selected path. Conditional nodes keep their existing body/skip structure. Either node can use a periodic condition, a comparison, or a group of conditions:
 
 | Collection | Fields |
 | --- | --- |
-| Condition | ConditionType=`comparison`, Operator, Unit, Expected; optional Operand for an unfinished draft |
+| Condition (group) | ConditionType=`all` (AND) or `any` (OR); Conditions collection containing one or more Condition collections, each with Order and its own condition shape |
+| Condition (comparison) | ConditionType=`comparison`, Operator, Unit, Expected; optional Operand for an unfinished draft |
 | Expected | DataType=`boolean`, `number` or `string`; Value typed `xs:boolean`, `xs:double` or `xs:string` respectively |
 | Operand, OperandType=`parameter` | StepId and the SourceElement reference and optional SourceAas identifying an effective parameter in that operation |
 | Operand, OperandType=`output` | StepId and OutputId identifying an operation output within the same scope |
@@ -85,6 +86,8 @@ A decision has exactly two ordered branches: Order 0 is Yes and Order 1 is No. B
 Operators are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`. Ordered comparisons require numbers. Missing or incompatible values, removed sources, invalid numbers and mismatched units remain unresolved; they never select No or Skip. Unit conversion is not implicit. Output IDs are unique within an operation, and node IDs remain unique within a scope. Semantic IDs use the existing application namespace with the field names above. Display-name changes do not change references.
 
 Operation outputs are declarations, not execution values. Preview results are scoped to each invocation and stay in browser component state. An output may be referenced after its operation, within its branch, and after an all-branches parallel join. A sibling parallel branch cannot consume it before the join. Outputs introduced inside decisions or optional flows cannot escape their selected-path merge until explicit merge mappings are implemented. Calls isolate output values; cross-subprocess mappings are not yet supported. A condition can read an effective parameter as a definition input independently of when that operation runs.
+
+Groups may nest to express mixed AND/OR rules. For example, `all(TopPassed = true, SidePassed = true)` accepts only when both inspection results pass. Every member must resolve before evaluating the group, including OR groups: missing, invalid or unavailable results are not hidden by short-circuit evaluation. Empty groups are invalid; a single-member group is allowed while editing. Each child has the Condition semantic ID and a unique indexed idShort, with explicit Order for stable editor display. Conditions uses the application semantic ID `https://smartproductionlab.aau.dk/ProductionSequence/Conditions/1/0`. Comparison and periodic shapes remain unchanged.
 
 All these flow shapes are supported by Production Sequence 3.0. Unsupported semantic contract versions and unknown condition/node types are rejected rather than silently dropped.
 

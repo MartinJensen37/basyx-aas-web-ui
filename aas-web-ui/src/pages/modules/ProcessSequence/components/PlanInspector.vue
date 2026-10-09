@@ -37,7 +37,6 @@
       </InspectorSection>
 
       <template v-else-if="node.kind === 'conditional' || node.kind === 'decision'">
-        <PlanConditionKind v-model="node.condition" class="mb-3" />
         <PlanCondition :key="node.id" v-model="node.condition" :nodes="nodes" />
       </template>
 
@@ -113,7 +112,6 @@
   import PlanBindings from './PlanBindings.vue'
   import PlanCapabilities from './PlanCapabilities.vue'
   import PlanCondition from './PlanCondition.vue'
-  import PlanConditionKind from './PlanConditionKind.vue'
   import PlanNodeType from './PlanNodeType.vue'
   import PlanOperationType from './PlanOperationType.vue'
   import PlanOutputs from './PlanOutputs.vue'

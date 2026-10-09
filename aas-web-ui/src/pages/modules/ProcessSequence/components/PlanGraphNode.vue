@@ -31,7 +31,7 @@
 
     <template v-if="node?.kind === 'decision' || node?.kind === 'conditional'">
       <div class="text-caption text-truncate px-3 pb-2" :title="data.details || data.subtitle">{{ data.subtitle }}</div>
-      <Handle v-if="node.condition.kind === 'comparison' && node.condition.operand?.kind === 'output'" id="condition-input" :position="Position.Right" type="target" />
+      <Handle v-if="conditionLeaves(node.condition).some(rule => rule.kind === 'comparison' && rule.operand?.kind === 'output')" id="condition-input" :position="Position.Right" type="target" />
     </template>
 
     <div v-if="node?.kind === 'step' && node.outputs?.length" class="border-t pb-1">
@@ -58,6 +58,7 @@
   import type { PlanNode, PlanProcess } from '../types/plan'
   import type { PlanGraphData } from '../utils/planGraph'
   import { Handle, Position } from '@vue-flow/core'
+  import { conditionLeaves } from '../utils/conditions'
   import { graphNodeHeight } from '../utils/planGraph'
   import PlanChoice from './PlanChoice.vue'
   import PlanConditionKind from './PlanConditionKind.vue'

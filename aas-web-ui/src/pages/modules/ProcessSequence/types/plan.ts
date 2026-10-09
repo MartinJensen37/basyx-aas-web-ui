@@ -20,7 +20,7 @@ const processSchema = z.object({
 const bindingSchema = z.object({ name: z.string(), value: z.string(), source: sourceSchema.nullable(), target: capabilityReferenceSchema.optional() })
 export const outputSchema = z.object({ id: z.string().min(1), name: z.string(), type: z.enum(['boolean', 'number', 'string']), unit: z.string(), source: capabilityReferenceSchema.optional() })
 export type PlanOutput = z.infer<typeof outputSchema>
-export const conditionSchema = z.discriminatedUnion('kind', [
+const simpleConditionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('everyNthProduct'), every: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) }),
   z.object({
     kind: z.literal('comparison'),
@@ -37,7 +37,12 @@ export const conditionSchema = z.discriminatedUnion('kind', [
     unit: z.string(),
   }),
 ])
-export type PlanCondition = z.infer<typeof conditionSchema>
+export type SimpleCondition = z.infer<typeof simpleConditionSchema>
+export type PlanCondition = SimpleCondition | { kind: 'all' | 'any', conditions: PlanCondition[] }
+export const conditionSchema: z.ZodType<PlanCondition> = z.lazy(() => z.union([
+  simpleConditionSchema,
+  z.object({ kind: z.enum(['all', 'any']), conditions: z.array(conditionSchema).min(1) }),
+]))
 
 export type SourceReference = z.infer<typeof sourceSchema>
 export type PlanParameter = z.infer<typeof parameterSchema>

@@ -22,7 +22,10 @@ plan.scopes = [
   { id: 'product', name: 'Product', parentId: null, material: null, nodes: [
     filling,
     { id: 'decision', kind: 'decision', name: 'Weight decision', condition: {
-      kind: 'comparison', operand: { kind: 'output', stepId: filling.id, outputId: 'measured-weight' }, operator: 'gte', expected: { type: 'number', value: 2 }, unit: 'g',
+      kind: 'all', conditions: [
+        { kind: 'comparison', operand: { kind: 'output', stepId: filling.id, outputId: 'measured-weight' }, operator: 'gte', expected: { type: 'number', value: 2 }, unit: 'g' },
+        { kind: 'comparison', operand: { kind: 'output', stepId: filling.id, outputId: 'measured-weight' }, operator: 'lte', expected: { type: 'number', value: 2.1 }, unit: 'g' },
+      ],
     }, branches: [{ id: 'yes', name: 'Yes', nodes: [] }, { id: 'no', name: 'No', nodes: [] }] },
     { id: 'optional', kind: 'conditional', name: 'Periodic inspection', condition: { kind: 'everyNthProduct', every: 5 }, nodes: [] },
     { id: 'call', kind: 'call', name: 'Subprocess', scopeId: 'subprocess' },
@@ -39,7 +42,11 @@ function annotate (element: Record<string, any>, parentMeaning = ''): void {
   const name = String(element.semanticId?.keys?.[0]?.value ?? '').replace('https://smartproductionlab.aau.dk/ProductionSequence/', '').replace('/1/0', '')
   if (element.modelType !== 'Submodel' && element.semanticId?.keys?.[0]?.value === sequenceSemantic(name)) {
     const isOptional = optional.has(name) || (name === 'Unit' && parentMeaning === 'ParameterOverride') || (name === 'Value' && parentMeaning === 'Binding')
-    element.qualifiers = [{ type: 'SMT/Cardinality', kind: 'TemplateQualifier', valueType: 'xs:string', value: repeatable.has(name) ? 'ZeroToMany' : (isOptional ? 'ZeroToOne' : 'One'), semanticId: { type: 'ExternalReference', keys: [{ type: 'GlobalReference', value: 'https://admin-shell.io/SubmodelTemplates/Cardinality/1/0' }] } }]
+    let cardinality = repeatable.has(name) ? 'ZeroToMany' : (isOptional ? 'ZeroToOne' : 'One')
+    if (name === 'Condition' && parentMeaning === 'Conditions') {
+      cardinality = 'OneToMany'
+    }
+    element.qualifiers = [{ type: 'SMT/Cardinality', kind: 'TemplateQualifier', valueType: 'xs:string', value: cardinality, semanticId: { type: 'ExternalReference', keys: [{ type: 'GlobalReference', value: 'https://admin-shell.io/SubmodelTemplates/Cardinality/1/0' }] } }]
   }
   for (const child of element.submodelElements ?? (Array.isArray(element.value) ? element.value : [])) {
     annotate(child, name)

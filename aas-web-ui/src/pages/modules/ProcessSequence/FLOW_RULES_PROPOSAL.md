@@ -1,6 +1,6 @@
 # Production flow rules proposal
 
-Status: broader design proposal. The first increment now supports a unified step editor, safe transformations, Boolean decisions, comparison-based optional flows, declared scalar operation outputs and branch-aware preview. Cross-subprocess input/output mappings, merge-output contracts, compound conditions, events, repetition and execution remain proposed. See the implemented [Application Production Sequence 2.0 contract](templates/README.md) for exact supported behavior.
+Status: broader design proposal. The first increment now supports a unified step editor, safe transformations, Boolean decisions, nested AND/OR conditions, comparison-based optional flows, declared scalar operation outputs and branch-aware preview. Cross-subprocess input/output mappings, merge-output contracts, events, repetition and execution remain proposed. See the implemented [Application Production Sequence 3.0 contract](templates/README.md) for exact supported behavior.
 
 ## Authoring model
 

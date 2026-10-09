@@ -48,12 +48,14 @@ export function previewPlan (plan: ProcessPlan, scopeId = plan.rootScopeId, prod
         case 'decision': {
           const options = conditionOptions(flattenNodes(plan.scopes.find(scope => scope.id === owner)!.nodes))
           const condition = node.condition
-          const option = condition.kind === 'comparison' ? options.find(option => option.key === JSON.stringify(condition.operand)) : undefined
-          const operand = option?.operand
-          const actual = operand?.kind === 'output' ? values[outputKey(invocation, operand.stepId, operand.outputId)] : option?.value
-          const evaluation = operand?.kind === 'output' && !available.has(operand.stepId)
-            ? { reason: 'This output is not available on every path reaching this condition. Move the decision into the producing branch or use an earlier operation.' }
-            : evaluateCondition(condition, option, actual, productNumber)
+          const evaluation = evaluateCondition(condition, comparison => {
+            const option = options.find(option => option.key === JSON.stringify(comparison.operand))
+            const operand = option?.operand
+            const actual = operand?.kind === 'output' ? values[outputKey(invocation, operand.stepId, operand.outputId)] : option?.value
+            return operand?.kind === 'output' && !available.has(operand.stepId)
+              ? { reason: 'This output is not available on every path reaching this condition. Move the decision into the producing branch or use an earlier operation.' }
+              : { option, actual }
+          }, productNumber)
           const labels = node.kind === 'conditional' ? ['Skip', 'Run'] : ['No', 'Yes']
           const choice: FlowChoice = {
             id: JSON.stringify(nextPath), name: node.name, condition: conditionLabel(condition, options),

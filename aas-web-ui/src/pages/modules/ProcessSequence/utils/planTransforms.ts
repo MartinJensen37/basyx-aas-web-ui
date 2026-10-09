@@ -1,5 +1,6 @@
 import type { PlanNode, ProcessPlan } from '../types/plan'
 import { v4 } from 'uuid'
+import { conditionLeaves } from './conditions'
 import { flattenNodes, newBranch, newNode, parsePlan } from './plan'
 import { findLane } from './planGraph'
 
@@ -78,8 +79,8 @@ export function changeNodeType (input: ProcessPlan, scopeId: string, nodeId: str
   if (replacement.kind === 'call' && (!empty || !callTarget)) {
     const moved = new Set(flattenNodes([current]).map(node => node.id))
     const crossing = flattenNodes(scope.nodes).some(node => (node.kind === 'decision' || node.kind === 'conditional')
-      && node.condition.kind === 'comparison' && node.condition.operand
-      && moved.has(node.id) !== moved.has(node.condition.operand.stepId))
+      && conditionLeaves(node.condition).some(rule => rule.kind === 'comparison' && rule.operand
+        && moved.has(node.id) !== moved.has(rule.operand.stepId)))
     if (crossing) {
       throw new Error('This extraction would break a condition reference across the subprocess boundary. Keep the referenced operations and their decisions in the same sequence.')
     }

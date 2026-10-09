@@ -1,7 +1,7 @@
 import type { PlanBranch, PlanNode, ProcessPlan } from '../types/plan'
 import { v4 } from 'uuid'
 import { planSchema } from '../types/plan'
-import { newComparison } from './conditions'
+import { conditionLeaves, newComparison } from './conditions'
 export { expandPlan } from './planPreview'
 
 export function newNode (kind: PlanNode['kind'], scopeId = ''): PlanNode {
@@ -47,7 +47,7 @@ export function flattenNodes (nodes: PlanNode[]): PlanNode[] {
 export function parsePlan (text: string, productAasId: string): ProcessPlan {
   const plan = planSchema.parse(JSON.parse(text))
   const nodes = plan.scopes.flatMap(scope => flattenNodes(scope.nodes))
-  if (nodes.some(node => node.kind === 'decision' || (node.kind === 'conditional' && node.condition.kind === 'comparison') || (node.kind === 'step' && (node.outputs !== undefined || node.process?.parameters.some(parameter => parameter.unit !== undefined))))) {
+  if (nodes.some(node => node.kind === 'decision' || (node.kind === 'conditional' && node.condition.kind !== 'everyNthProduct') || (node.kind === 'step' && (node.outputs !== undefined || node.process?.parameters.some(parameter => parameter.unit !== undefined))))) {
     plan.schema = 'process-sequence-plan/5.0'
   } else if (plan.schema !== 'process-sequence-plan/5.0' && nodes.some(node => node.kind === 'conditional')) {
     plan.schema = 'process-sequence-plan/4.0'
@@ -96,7 +96,7 @@ export function structuralIssues (plan: ProcessPlan): string[] {
           ids.add(branch.id)
         }
       }
-      if ((node.kind === 'conditional' || node.kind === 'decision') && node.condition.kind === 'everyNthProduct' && (!Number.isSafeInteger(node.condition.every) || node.condition.every < 1)) {
+      if ((node.kind === 'conditional' || node.kind === 'decision') && conditionLeaves(node.condition).some(rule => rule.kind === 'everyNthProduct' && (!Number.isSafeInteger(rule.every) || rule.every < 1))) {
         issues.push(`${scope.name} / ${node.name}: enter a positive whole number of products.`)
       }
       if (ids.has(node.id)) {

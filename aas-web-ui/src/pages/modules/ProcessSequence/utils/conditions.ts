@@ -1,4 +1,4 @@
-import type { PlanCondition, PlanNode, PlanOutput } from '../types/plan'
+import type { PlanCondition, PlanNode, PlanOutput, SimpleCondition } from '../types/plan'
 
 export type Comparison = Extract<PlanCondition, { kind: 'comparison' }>
 export type ConditionOption = { key: string, name: string, shortName: string, operand: NonNullable<Comparison['operand']>, type: PlanOutput['type'], unit: string, value?: boolean | number | string }
@@ -10,6 +10,21 @@ export const operators = [
 
 export function newComparison (): Comparison {
   return { kind: 'comparison', operand: null, operator: 'eq', expected: { type: 'boolean', value: true }, unit: '' }
+}
+
+export function conditionLeaves (condition: PlanCondition): SimpleCondition[] {
+  return 'conditions' in condition ? condition.conditions.flatMap(rule => conditionLeaves(rule)) : [condition]
+}
+
+/** Keep the existing rule when creating or switching a group. */
+export function changeConditionKind (condition: PlanCondition, kind: PlanCondition['kind']): PlanCondition {
+  if (condition.kind === kind) {
+    return condition
+  }
+  if (kind === 'all' || kind === 'any') {
+    return { kind, conditions: 'conditions' in condition ? condition.conditions : [condition, newComparison()] }
+  }
+  return kind === 'everyNthProduct' ? { kind, every: 5 } : newComparison()
 }
 
 /** Only explicitly supported scalar datatypes are exposed; unknown types are not coerced. */
@@ -56,6 +71,9 @@ export function conditionOptions (nodes: PlanNode[]): ConditionOption[] {
 }
 
 export function conditionLabel (condition: PlanCondition, options: ConditionOption[], compact = false): string {
+  if ('conditions' in condition) {
+    return `(${condition.conditions.map(rule => conditionLabel(rule, options, compact)).join(condition.kind === 'all' ? ' AND ' : ' OR ')})`
+  }
   if (condition.kind === 'everyNthProduct') {
     return `Every ${condition.every} products`
   }
@@ -68,9 +86,25 @@ export function conditionLabel (condition: PlanCondition, options: ConditionOpti
 }
 
 /** Undefined is unresolved, never a false branch. Values are supplied by a preview/executor. */
-export function evaluateCondition (condition: PlanCondition, option: ConditionOption | undefined, actual: unknown, productNumber: number): { value?: boolean, reason?: string } {
+export function evaluateCondition (condition: PlanCondition, resolve: (comparison: Comparison) => { option?: ConditionOption, actual?: unknown, reason?: string }, productNumber: number): { value?: boolean, reason?: string } {
+  if ('conditions' in condition) {
+    if (condition.conditions.length === 0) {
+      return { reason: 'Add at least one condition.' }
+    }
+    const results = condition.conditions.map(rule => evaluateCondition(rule, resolve, productNumber))
+    // Require all declared checks to resolve, even if one result could decide the group.
+    const unresolved = results.find(result => result.value === undefined)
+    if (unresolved) {
+      return unresolved
+    }
+    return { value: condition.kind === 'all' ? results.every(result => result.value) : results.some(result => result.value) }
+  }
   if (condition.kind === 'everyNthProduct') {
     return { value: productNumber % condition.every === 0 }
+  }
+  const { option, actual, reason } = resolve(condition)
+  if (reason) {
+    return { reason }
   }
   if (!option) {
     return { reason: 'Choose an existing parameter or operation output.' }

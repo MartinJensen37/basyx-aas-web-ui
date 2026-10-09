@@ -1,4 +1,4 @@
-import type { StepNode } from '../../src/pages/modules/ProcessSequence/types/plan'
+import type { DecisionNode, StepNode } from '../../src/pages/modules/ProcessSequence/types/plan'
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
 import { ARSO_FIXTURE_BASE, buildArsoFixture } from '../../src/pages/modules/ProcessSequence/fixtures/arsoResources'
@@ -91,6 +91,47 @@ test('assigns ARSO skills, binds recipe inputs, links results and rechecks chang
   await page.getByRole('button', { name: 'Inspection', exact: true }).click()
   await page.getByRole('button', { name: 'Expand Operation outputs', exact: true }).click()
   await expect(page.getByRole('combobox', { name: 'Skill result', exact: true }).first()).toHaveValue('TopPassed')
+  await page.getByRole('button', { name: 'Use TopPassed in decision', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Check TopPassed')
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Both inspections pass')
+  const choose = async (label: string, value: string, index = 0) => {
+    await page.getByRole('combobox', { name: label, exact: true }).nth(index).focus()
+    await page.keyboard.press('ArrowDown')
+    const option = page.getByRole('option', { name: value, exact: true })
+    await option.focus()
+    await expect(option).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('combobox', { name: label, exact: true }).nth(index)).toHaveValue(value)
+  }
+  await choose('Condition rule', 'All conditions (AND)')
+  await expect(page.getByRole('combobox', { name: 'Condition value', exact: true }).first()).toHaveValue('Inspection / Output / TopPassed')
+  await choose('Condition value', 'Inspection / Output / SidePassed', 1)
+  await page.getByRole('button', { name: 'Add condition', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Condition value', exact: true })).toHaveCount(3)
+  await page.getByRole('button', { name: 'Remove condition', exact: true }).last().click()
+  await expect(page.getByRole('combobox', { name: 'Condition value', exact: true })).toHaveCount(2)
+  await choose('Condition rule', 'Any condition (OR)')
+  await expect(page.getByRole('combobox', { name: 'Condition value', exact: true }).nth(1)).toHaveValue('Inspection / Output / SidePassed')
+  await choose('Condition rule', 'All conditions (AND)')
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect(page.getByText('Saved revision 2', { exact: true })).toBeVisible()
+  const withConditions = await readStoredSequence(await (await request.get(`${repository}/submodels/${encode(sequence.id)}`)).json(), request, repository!)
+  const decision = withConditions.scopes[0].nodes.find(node => node.kind === 'decision') as DecisionNode
+  expect(decision.condition).toMatchObject({ kind: 'all', conditions: inspection.outputs!.map(output => ({ kind: 'comparison', operand: { kind: 'output', stepId: inspection.id, outputId: output.id }, expected: { type: 'boolean', value: true } })) })
+  await page.getByRole('button', { name: 'Reload plans', exact: true }).click()
+  await page.getByRole('button', { name: 'Both inspections pass', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Condition rule', exact: true }).first()).toHaveValue('All conditions (AND)')
+  await expect(page.getByRole('combobox', { name: 'Condition value', exact: true }).nth(1)).toHaveValue('Inspection / Output / SidePassed')
+  await page.getByRole('button', { name: 'Combined steps', exact: true }).click()
+  const choices = page.getByRole('list', { name: 'Flow choices', exact: true })
+  await expect(choices.getByText('Unresolved', { exact: true })).toBeVisible()
+  await choose('Inspection / TopPassed', 'True')
+  await expect(choices.getByText('Unresolved', { exact: true })).toBeVisible()
+  await choose('Inspection / SidePassed', 'True')
+  await expect(choices.getByText('Yes', { exact: true })).toBeVisible()
+  await choose('Inspection / SidePassed', 'False')
+  await expect(choices.getByText('No', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Edit sequence', exact: true }).click()
   // Change only the process source, leaving the required capability's old 2 mL scalar intact.
   const source = structuredClone(fixture.submodels.find(model => model.idShort === 'ProcessParameters')!)
   const operation = source.submodelElements[0].value.find((element: any) => element.idShort === 'Filling')

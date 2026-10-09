@@ -1,6 +1,6 @@
 # Process Sequence module
 
-The [flow rules proposal](FLOW_RULES_PROPOSAL.md) describes the broader direction. Its first increment is implemented: a unified step editor, Boolean decisions, comparison-based optional flows and simulated operation outputs. Events, repetition and execution remain future work.
+The [flow rules proposal](FLOW_RULES_PROPOSAL.md) describes the broader direction. Its first increment is implemented: a unified step editor, Boolean decisions, nested AND/OR conditions, comparison-based optional flows and simulated operation outputs. Events, repetition and execution remain future work.
 
 Open `/modules/processsequence` without selecting a submodel. **Product to plan** lists AASs with the exact IDTA 02031-1 Process Parameters Type semantic ID. Names and arbitrary files do not qualify a product.
 
@@ -20,7 +20,7 @@ Solid arrows show execution order. Selecting a producer or consuming decision sh
 
 ## Decisions and type changes
 
-Decisions have Yes and No branches. Optional flows have a Run body and an empty Skip path. Both support Every N products or a typed comparison against a Process Parameters input or a declared operation output. Boolean/string values support equality and inequality; numbers also support ordered comparisons. Parameter units are retained when available, and output units are explicit. Comparisons require matching types and units; no unit conversion is inferred.
+Decisions have Yes and No branches. Optional flows have a Run body and an empty Skip path. Both support AND/OR groups, Every N products, or a typed comparison against a Process Parameters input or a declared operation output. Boolean/string values support equality and inequality; numbers also support ordered comparisons. Parameter units are retained when available, and output units are explicit. Comparisons require matching types and units; no unit conversion is inferred.
 
 Declare an operation's outputs in **Operation outputs**. **Combined steps** accepts simulated results for each subprocess invocation and lists the selected paths. Missing values, incompatible types/units and unavailable outputs pause the affected path and its successors. Other parallel branches can still be previewed. A result produced only in an alternative path cannot be referenced after its merge; keep the decision inside that path until explicit merge-output contracts are supported. Process parameters are definition inputs, not live station measurements. Simulated values are never saved in the definition or sent to equipment.
 
@@ -99,3 +99,9 @@ Material cards appear automatically beside operations using their ProcessBoM ref
 The pharma examples declare one stopper per stoppering cycle and link each dose's liquid quantity to its FillVolume parameter. The packing tray enters at Packing, which also declares the finished product. Material requirements live in Process Parameters; only changed requirements are stored as sequence overrides. See the [material-use contract](templates/README.md#material-use-and-diagram-connections) for semantic IDs and fields.
 
 BoM `BulkCount` is shown on material cards when no step quantity is declared, with a **BoM:** label. Click a card to compare the occurrence count with the step allocation. Two stoppers in the BoM can still mean one at each of two stoppering steps. Counts are read by semantic ID and refresh with **Reload plans**. See the [quantity rules](templates/README.md#bom-count-versus-operation-quantity).
+
+## Combined decision conditions
+
+Select **All conditions (AND)** to require multiple checks, or **Any condition (OR)** to accept any passing check. Switching to a group retains the existing comparison; use **Add condition** for additional checks. Each row can itself become a group for mixed rules. For inspection, add the station results, then compare `Inspection / Output / TopPassed` and `Inspection / Output / SidePassed` to `True` in an AND group.
+
+The graph shows the result connections when the decision or producing operation is selected. Rules are saved as nested AAS collections with semantic IDs in ProductionSequence. In **Combined steps**, supply both simulated results: missing or incompatible values leave the decision unresolved, even when another check could decide an AND/OR expression. Existing single comparisons and periodic conditions remain supported.

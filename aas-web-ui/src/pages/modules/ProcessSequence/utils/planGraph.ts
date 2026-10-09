@@ -2,7 +2,7 @@ import type { PlanNode, PlanScope } from '../types/plan'
 import type { MaterialUse } from './materials'
 import type { Edge, Node } from '@vue-flow/core'
 import { MarkerType } from '@vue-flow/core'
-import { conditionLabel, conditionOptions } from './conditions'
+import { conditionLabel, conditionLeaves, conditionOptions } from './conditions'
 import { materialRoles, readMaterialUses } from './materials'
 import { flattenNodes } from './plan'
 
@@ -178,25 +178,33 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
   connect(end.last, add('end', 0, end.y, { title: 'Complete', subtitle: 'Append to sequence', kind: 'end' }))
   const all = flattenNodes(sequence)
   for (const node of all) {
-    if ((node.kind !== 'decision' && node.kind !== 'conditional') || node.condition.kind !== 'comparison') {
+    if (node.kind !== 'decision' && node.kind !== 'conditional') {
       continue
     }
-    const operand = node.condition.operand
-    if (operand?.kind !== 'output' || (node.id !== selectedId && operand.stepId !== selectedId)) {
-      continue
+    const seen = new Set<string>()
+    for (const rule of conditionLeaves(node.condition)) {
+      const operand = rule.kind === 'comparison' ? rule.operand : null
+      const key = JSON.stringify(operand)
+      if (seen.has(key)) {
+        continue
+      }
+      seen.add(key)
+      if (operand?.kind !== 'output' || (node.id !== selectedId && operand.stepId !== selectedId)) {
+        continue
+      }
+      const producer = all.find(item => item.id === operand.stepId)
+      const output = producer?.kind === 'step' ? producer.outputs?.find(item => item.id === operand.outputId) : undefined
+      if (!output || !producer) {
+        continue
+      }
+      edges.push({
+        id: `result:${node.id}:${key}`, source: `node:${producer.id}`, target: `node:${node.id}`,
+        sourceHandle: `output:${output.id}`, targetHandle: 'condition-input', type: 'smoothstep',
+        label: output.name, ariaLabel: `${output.name} from ${producer.name} to ${node.name}`,
+        data: { kind: 'result' }, markerEnd: MarkerType.ArrowClosed,
+        style: { stroke: '#7e57c2', strokeWidth: 2, strokeDasharray: '6 4' },
+      })
     }
-    const producer = all.find(item => item.id === operand.stepId)
-    const output = producer?.kind === 'step' ? producer.outputs?.find(item => item.id === operand.outputId) : undefined
-    if (!output || !producer) {
-      continue
-    }
-    edges.push({
-      id: `result:${node.id}`, source: `node:${producer.id}`, target: `node:${node.id}`,
-      sourceHandle: `output:${output.id}`, targetHandle: 'condition-input', type: 'smoothstep',
-      label: output.name, ariaLabel: `${output.name} from ${producer.name} to ${node.name}`,
-      data: { kind: 'result' }, markerEnd: MarkerType.ArrowClosed,
-      style: { stroke: '#7e57c2', strokeWidth: 2, strokeDasharray: '6 4' },
-    })
   }
   return { nodes, edges }
 }

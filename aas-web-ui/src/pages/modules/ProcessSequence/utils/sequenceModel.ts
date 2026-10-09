@@ -59,6 +59,12 @@ export function readRequirements (element: AasElement) {
 }
 
 function conditionElement (condition: PlanCondition): AasElement {
+  if ('conditions' in condition) {
+    return collection('Condition', [prop('ConditionType', condition.kind), collection('Conditions', condition.conditions.map((rule, index) => {
+      const child = conditionElement(rule)
+      return { ...child, idShort: indexed('Condition', index), value: [...child.value, prop('Order', index, 'xs:nonNegativeInteger')] }
+    }))])
+  }
   if (condition.kind === 'everyNthProduct') {
     return collection('Condition', [
       prop('ConditionType', condition.kind), prop('EveryNProducts', condition.every, 'xs:positiveInteger'), prop('CounterScope', 'productionRun'),
@@ -80,6 +86,14 @@ function readCondition (element: AasElement): PlanCondition {
   const condition = field(element, 'Condition')
   if (!condition) {
     throw new Error('Missing flow condition.')
+  }
+  return readConditionValue(condition)
+}
+
+function readConditionValue (condition: AasElement): PlanCondition {
+  const kind = value(condition, 'ConditionType')
+  if (kind === 'all' || kind === 'any') {
+    return conditionSchema.parse({ kind, conditions: ordered(children(condition, 'Conditions')).map(rule => readConditionValue(rule)) })
   }
   if (value(condition, 'ConditionType') === 'everyNthProduct') {
     if (value(condition, 'CounterScope') !== 'productionRun') {
