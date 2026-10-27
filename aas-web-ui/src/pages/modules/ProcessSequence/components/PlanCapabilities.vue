@@ -2,7 +2,7 @@
   <InspectorSection
     collapsible
     color="success"
-    help="Matches capability meanings, values, ranges and units across all resources. Choose one station skill per step. Availability and additional constraints require separate checks."
+    help="Matches capability meanings, values, ranges and units across all resources, and says which are offered only after a reconfiguration. Choose one station skill per step. Additional constraints require separate checks."
     :initially-open="false"
     :summary="`${requirements.length} required`"
     title="Capabilities"

@@ -28,4 +28,7 @@ export const HIERARCHICAL_STRUCTURES_SUBMODEL = {
   entryNodeSemanticId: 'https://admin-shell.io/idta/HierarchicalStructures/EntryNode/1/0',
 } as const
 
+/** Hierarchical Structures of any 1.x revision (the lab's resources use 1/1). */
+export const isHierarchicalStructures = (semanticId: string): boolean => /^https:\/\/admin-shell\.io\/idta\/HierarchicalStructures\/1\/\d+\/Submodel$/.test(semanticId)
+
 export const ARSO_SKILLS_SUBMODEL = `${PROCESS_SEQUENCE_IRI_BASE}/ARSO/Skills/1/0/Submodel`

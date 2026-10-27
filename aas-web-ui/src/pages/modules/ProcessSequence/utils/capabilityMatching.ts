@@ -1,5 +1,5 @@
 import type { CapabilityRequirement, PlanParameter } from '../types/plan'
-import type { CapabilityDescription } from './capabilities'
+import type { Availability, CapabilityDescription } from './capabilities'
 import { capabilitySemantic } from '../constants/capabilities'
 import { canonicalMeaning, compatibleType, numericTypes } from './parameterSemantics'
 import { childrenOf, semanticId } from './planSources'
@@ -14,7 +14,20 @@ export type CapabilityProperty = {
   min: string
   max: string
 }
-export type CapabilityMatch = { aasId: string, status: 'match' | 'mismatch' | 'unknown', reasons: string[], capabilities: CapabilityDescription[] }
+/**
+ * How one resource answers a step's requirements. ``availability``: whether every capability it
+ * matches with is offered now, or one only after a reconfiguration (its skill is described, not
+ * built); ``reconfigure`` names those skills.
+ */
+export type CapabilityMatch = {
+  aasId: string
+  status: 'match' | 'mismatch' | 'unknown'
+  reasons: string[]
+  capabilities: CapabilityDescription[]
+  availability: Availability
+  reconfigure: string[]
+}
+const statusRank: Record<CapabilityMatch['status'], number> = { match: 0, unknown: 1, mismatch: 2 }
 const identity = (reference: CapabilityRequirement['reference']) => JSON.stringify([reference.type, reference.keys.map(key => [key.type, key.value])])
 
 export function readCapabilityProperties (container: Record<string, any>): CapabilityProperty[] {
@@ -108,14 +121,24 @@ export function matchCapabilities (requirements: CapabilityRequirement[], catalo
           return compareProperty(effective, candidate.properties.find(item => canonicalMeaning(item.semanticId) === canonicalMeaning(property.semanticId)))
         })
         const unsupported = required?.hasConstraints || candidate.hasConstraints
-        const status = checks.some(check => check.status === 'mismatch') ? 'mismatch' : (unsupported || checks.some(check => check.status === 'unknown') ? 'unknown' : 'match')
+        const status: CapabilityMatch['status'] = checks.some(check => check.status === 'mismatch') ? 'mismatch' : (unsupported || checks.some(check => check.status === 'unknown') ? 'unknown' : 'match')
         return { candidate, status, reasons: [...checks.map(check => check.reason), ...(unsupported ? ['Additional constraints need evaluation'] : [])] }
       })
-      const best = checked.find(item => item.status === 'match') ?? checked.find(item => item.status === 'unknown') ?? checked[0]
+      // The best status first; of equal ones, a capability offered now before one after a reconfiguration.
+      const best = checked.toSorted((a, b) => statusRank[a.status] - statusRank[b.status]
+        || Number(a.candidate.availability !== 'Now') - Number(b.candidate.availability !== 'Now'))[0]
       capabilities.push(best.candidate)
       reasons.push(...best.reasons)
+      if (best.candidate.availability === 'AfterReconfiguration') {
+        reasons.push(`${requirement.name}: offered after a reconfiguration (the skill is described, not built yet)`)
+      }
       return best.status
     }))
-    return { aasId, status: statuses.has('mismatch') ? 'mismatch' : (statuses.has('unknown') ? 'unknown' : 'match'), reasons, capabilities }
+    const later = capabilities.filter(item => item.availability === 'AfterReconfiguration')
+    return {
+      aasId, status: statuses.has('mismatch') ? 'mismatch' : (statuses.has('unknown') ? 'unknown' : 'match'), reasons, capabilities,
+      availability: later.length > 0 ? 'AfterReconfiguration' : 'Now',
+      reconfigure: [...new Set(later.flatMap(item => item.realizedBy.map(reference => reference.keys.at(-1)?.value ?? '')).filter(Boolean))],
+    }
   })
 }

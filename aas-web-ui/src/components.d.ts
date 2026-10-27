@@ -25,6 +25,7 @@ declare module 'vue' {
     AnnotatedRelationshipElementForm: typeof import('./components/EditorComponents/SubmodelElements/AnnotatedRelationshipElementForm.vue')['default']
     AppNavigation: typeof import('./components/AppNavigation/AppNavigation.vue')['default']
     AreaChart: typeof import('./components/Widgets/AreaChart.vue')['default']
+    ArsoSkill_v1_0: typeof import('./components/Plugins/SubmodelElements/ArsoSkill_v1_0.vue')['default']
     ArsoSkills_v1_0: typeof import('./components/Plugins/Submodels/ArsoSkills_v1_0.vue')['default']
     AssetIdInput: typeof import('./components/EditorComponents/InputTypes/AssetIdInput.vue')['default']
     AssetInformation: typeof import('./components/UIComponents/AssetInformation.vue')['default']

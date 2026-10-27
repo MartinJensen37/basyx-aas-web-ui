@@ -5,15 +5,17 @@ import { PROCESS_SEQUENCE_IRI_BASE } from '../constants/contracts'
 import { children, collection, field, indexed, members, modelRef, ordered, prop, ref, sem, value } from '../utils/sequenceModel'
 
 /**
- * A resource's skills (ARSO 0.9) as the sequence editor's nodes, and back.
+ * A resource's skills (ARSO 0.10) as the sequence editor's nodes, and back.
  *
  * A skill of a module is its commands. What Start (and Stop) run is a flow in the elements of
  * Production Sequence: steps with NodeId, Kind, Name and Order; a step of the kind `step` runs a
  * skill of one of the module's components, with Bindings (a constant, or a parameter of the skill
  * it is a step of) and Outputs (which result of the skill it gives). The module's control program
- * is brought to what is saved here by `modsync reconfigure` (iec61499-mgmt-py).
+ * is brought to what is saved here by `modsync reconfigure` (iec61499-mgmt-py). A module level skill
+ * says whether the program carries it out (`Deployment`: Built) or it is only described (Described).
  */
 export type SkillKind = 'Primitive' | 'Composite' | 'ModuleControl'
+export type Deployment = 'Built' | 'Described'
 export type SkillCommand = 'Start' | 'Stop'
 export type ResourceSkill = {
   idShort: string
@@ -27,9 +29,11 @@ export type ResourceSkill = {
   outputs: SkillParameter[]
   /** The commands that run steps. */
   flows: SkillCommand[]
+  /** Whether the program carries it out. */
+  deployment: Deployment
 }
 
-const skillMeaning = `${PROCESS_SEQUENCE_IRI_BASE}/skill`
+export const skillMeaning = `${PROCESS_SEQUENCE_IRI_BASE}/skill`
 const protocolMeaning = `${PROCESS_SEQUENCE_IRI_BASE}/ControlComponent/Skill/OperationVariable/1/0`
 const kinds: SkillKind[] = ['Primitive', 'Composite', 'ModuleControl']
 /** What a module built by the module rules can run; ARSO describes more kinds of step. */
@@ -37,14 +41,20 @@ export const RUNNABLE_KINDS: PlanNode['kind'][] = ['step']
 const IDENTIFIER = /^[A-Z]\w*$/i
 const child = (element: AasElement | undefined, idShort: string): AasElement | undefined => members(element ?? {}).find(item => item.idShort === idShort)
 const meaning = (element: AasElement | undefined): string => element?.semanticId?.keys?.[0]?.value ?? ''
-const isSkill = (element: AasElement): boolean => element.modelType === 'SubmodelElementCollection' && (meaning(element) === skillMeaning || meaning(element).startsWith(`${skillMeaning}/`))
+export const isSkill = (element: AasElement): boolean => element.modelType === 'SubmodelElementCollection' && (meaning(element) === skillMeaning || meaning(element).startsWith(`${skillMeaning}/`))
 
 /** What holds the skills of a Skills submodel: the submodel itself since ARSO 0.9, its collection Skills before. */
 function skillHolder (submodel: AasElement): AasElement {
   const inner = child(submodel, 'Skills')
   return inner && !meaning(inner) ? inner : submodel
 }
-const skillOf = (submodel: AasElement, skill: string): AasElement | undefined => child(skillHolder(submodel), skill)
+export const skillOf = (submodel: AasElement, skill: string): AasElement | undefined => child(skillHolder(submodel), skill)
+/** Where a skill is in its Skills submodel, as an idShort path: its own element, or in an older AAS one of its collection Skills. */
+export const skillPath = (submodel: AasElement, skill: string): string => (skillHolder(submodel) === submodel ? skill : `Skills.${skill}`)
+/** Whether the program carries a skill out; a skill that does not say is built (a primitive is a block type). */
+export const deploymentOf = (skill: AasElement | undefined): Deployment => (child(skill, 'Deployment')?.value === 'Described' ? 'Described' : 'Built')
+/** The rule set the module's program is built by, if its Skills submodel states it. */
+export const ruleSetOf = (submodel: AasElement): string => String(child(submodel, 'RuleSet')?.value ?? '')
 /** The keys of the reference to a skill of a Skills submodel. */
 function skillKeys (submodel: AasElement, skill: string): CapabilityReference['keys'] {
   return [
@@ -91,6 +101,7 @@ export function readSkills (submodel: AasElement, aasId = ''): ResourceSkill[] {
       description: skill.description?.find((item: AasElement) => item.language === 'en')?.text ?? '',
       reference, inputs: read(skill, 'inputVariables', reference), outputs: read(skill, 'outputVariables', reference),
       flows: (['Start', 'Stop'] as SkillCommand[]).filter(command => field(child(skill, command) ?? {}, 'Steps')),
+      deployment: deploymentOf(skill),
     }
   })
 }
@@ -313,8 +324,8 @@ export function withParameter (submodel: AasElement, skill: string, parameter: s
 
 /**
  * The Skills submodel with one more module level skill, described like ``from`` under another name.
- * It is described, not built: it has no action of the interface yet (no InterfaceReference), and
- * the module's Control Configuration records no instance of it until `modsync reconfigure` built it.
+ * It is described, not built (Deployment Described): it has no action of the interface yet (no
+ * InterfaceReference) until `modsync reconfigure` built it and marked it Built.
  */
 export function withNewSkill (submodel: AasElement, from: string, name: string): AasElement {
   const copy = plainCopy(submodel)
@@ -346,6 +357,7 @@ export function withNewSkill (submodel: AasElement, from: string, name: string):
   const made = rename(source)
   made.idShort = name
   made.description = [{ language: 'en', text: `Skill ${name}` }]
+  made.value = [{ modelType: 'Property', idShort: 'Deployment', valueType: 'xs:string', value: 'Described' }, ...members(made).filter(item => item.idShort !== 'Deployment')]
   for (const command of members(made).filter(item => item.modelType === 'SubmodelElementCollection')) {
     // Not callable until it is built: the action that calls it does not exist yet.
     command.value = members(command).filter(item => item.idShort !== 'InterfaceReference')

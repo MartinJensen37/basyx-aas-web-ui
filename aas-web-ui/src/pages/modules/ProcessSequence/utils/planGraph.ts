@@ -56,7 +56,9 @@ export function findLane (nodes: PlanNode[], id: string): { nodes: PlanNode[], i
 }
 
 /** A projection only: positions and presentation nodes never enter the saved plan. */
-export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, name: string }[], selectedId = '', scopes: PlanScope[] = [], showMaterials = true): { nodes: Node<PlanGraphData>[], edges: Edge[] } {
+/** ``sizes``: other heights for some kinds of node (the skill editor's steps are smaller). */
+export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, name: string }[], selectedId = '', scopes: PlanScope[] = [], showMaterials = true, sizes: Partial<typeof graphNodeHeight> = {}): { nodes: Node<PlanGraphData>[], edges: Edge[] } {
+  const heightOf = { ...graphNodeHeight, ...sizes }
   const nodes: Node<PlanGraphData>[] = []
   const edges: Edge[] = []
   const options = conditionOptions(flattenNodes(sequence))
@@ -125,7 +127,7 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
       const materials = uses.get(node.id) ?? []
       const inputs = materials.filter(material => material.role !== 'output')
       const outputs = materials.filter(material => material.role === 'output')
-      const height = Math.max(graphNodeHeight[node.kind] + (node.kind === 'step' && node.outputs?.length ? 24 + 28 * node.outputs.length : 0), Math.max(inputs.length, outputs.length) * 84 - 12)
+      const height = Math.max(heightOf[node.kind] + (node.kind === 'step' && node.outputs?.length ? 24 + 28 * node.outputs.length : 0), Math.max(inputs.length, outputs.length) * 84 - 12)
       const id = add(`node:${node.id}`, x, y, {
         title: node.name, kind: node.kind, planId: node.id,
         height, hasMaterials: materials.length > 0,
@@ -155,14 +157,14 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
             kind: skip ? 'skip' : 'branch', branchId: skip ? undefined : branch.id, planId: skip ? node.id : undefined,
           })
           connect(id, header)
-          return layout(branch.nodes, center, y + graphNodeHeight.branch + gap, header)
+          return layout(branch.nodes, center, y + heightOf.branch + gap, header)
         })
         y = Math.max(...ends.map(end => end.y))
         last = add(`join:${node.id}`, x, y, {
           title: node.kind === 'parallel' ? 'Wait for all branches' : 'Continue after selected path',
           subtitle: node.name, kind: node.kind === 'parallel' ? 'join' : 'merge', planId: node.id,
         })
-        y += graphNodeHeight.join + gap
+        y += heightOf.join + gap
         for (const end of ends) {
           connect(end.last, last)
         }
@@ -174,7 +176,7 @@ export function buildPlanGraph (sequence: PlanNode[], targets: { id: string, nam
   }
 
   const start = add('start', 0, 0, { title: 'Start', subtitle: 'Insert at sequence start', kind: 'start' })
-  const end = layout(sequence, 0, graphNodeHeight.start + gap, start)
+  const end = layout(sequence, 0, heightOf.start + gap, start)
   connect(end.last, add('end', 0, end.y, { title: 'Complete', subtitle: 'Append to sequence', kind: 'end' }))
   const all = flattenNodes(sequence)
   for (const node of all) {

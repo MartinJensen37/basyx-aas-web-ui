@@ -1,15 +1,20 @@
 <template>
   <v-container class="pa-0" fluid>
-    <SkillFlowEditor v-if="submodelElementData?.id && aasId" :aas-id="aasId" :submodel-id="submodelElementData.id" />
+    <SkillsOverview
+      v-if="submodelElementData?.id && aasId"
+      :aas-id="aasId"
+      :path="submodelElementData.path"
+      :submodel-id="submodelElementData.id"
+    />
   </v-container>
 </template>
 
 <script lang="ts" setup>
-  import SkillFlowEditor from '@/pages/modules/ProcessSequence/skills/SkillFlowEditor.vue'
+  import SkillsOverview from '@/pages/modules/ProcessSequence/skills/SkillsOverview.vue'
   import { useAASStore } from '@/store/AASDataStore'
 
-  // The Skills submodel of a resource (ARSO): its skills shown and edited as flows of steps, in the
-  // style of the production sequence of a product.
+  // The Skills submodel of a resource (ARSO): an overview of its skills. A single skill, selected in
+  // the tree, opens in the skill editor (SubmodelElements/ArsoSkill_v1_0.vue).
   defineOptions({
     name: 'ArsoSkills',
     semanticId: 'https://smartproductionlab.aau.dk/ARSO/Skills/1/0/Submodel',

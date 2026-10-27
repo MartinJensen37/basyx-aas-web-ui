@@ -6,9 +6,12 @@ import { readCapabilityProperties } from './capabilityMatching'
 import { canonicalMeaning } from './parameterSemantics'
 import { childrenOf, semanticId } from './planSources'
 
+/** Offered now, or once a skill that is described and not built yet is built (ARSO: Availability). */
+export type Availability = 'Now' | 'AfterReconfiguration'
 export type CapabilityDescription = CapabilityRequirement & {
   aasId: string
   role: 'Required' | 'Offered' | 'NotAssigned'
+  availability: Availability
   semanticIds: string[]
   realizedBy: CapabilityReference[]
   properties: CapabilityProperty[]
@@ -41,6 +44,10 @@ export function readCapabilities (submodel: Record<string, any>, aasId: string):
     return {
       name: capability.displayName?.find((name: Record<string, string>) => name.language === 'en')?.text ?? container.displayName?.find((name: Record<string, string>) => name.language === 'en')?.text ?? container.idShort ?? capability.idShort,
       reference, aasId, role: roles.length === 1 ? roles[0] : 'NotAssigned',
+      availability: (capability.qualifiers ?? []).some((qualifier: Record<string, any>) => qualifier.type === 'Availability'
+        && qualifier.value === 'AfterReconfiguration')
+        ? 'AfterReconfiguration'
+        : 'Now',
       properties: readCapabilityProperties(container),
       hasConstraints: childrenOf(container).some(child => semanticId(child) === capabilitySemantic('CapabilityRelations')
         && childrenOf(child).some(item => ['ConstraintSet', 'ComposedOfSet', 'GeneralizedBySet'].some(name => semanticId(item) === capabilitySemantic(name)))),
@@ -56,7 +63,7 @@ export function readCapabilities (submodel: Record<string, any>, aasId: string):
   })))
 }
 
-/** Identity candidates only: properties, constraints, composition and availability still need evaluation. */
+/** Identity candidates only: properties, constraints and composition still need evaluation. */
 export function capabilityCandidates (requirements: CapabilityRequirement[], catalog: CapabilityDescription[]): string[] {
   if (requirements.length === 0) {
     return []

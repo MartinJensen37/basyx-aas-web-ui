@@ -101,7 +101,8 @@
   const { fitView } = useVueFlow({ id: flowId })
   const insertionId = ref('end')
 
-  const graph = computed(() => buildPlanGraph(nodes.value, [], props.selectedId, [], false))
+  // A step card holds three short lines: its name, what it runs, what it is handed.
+  const graph = computed(() => buildPlanGraph(nodes.value, [], props.selectedId, [], false, { step: 76 }))
   const steps = computed(() => new Map(flattenNodes(nodes.value).map(node => [node.id, node])))
   const selected = computed(() => steps.value.get(props.selectedId))
   const location = computed(() => findLane(nodes.value, props.selectedId))

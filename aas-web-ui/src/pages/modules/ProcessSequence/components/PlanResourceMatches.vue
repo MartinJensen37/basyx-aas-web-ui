@@ -16,7 +16,7 @@
       </v-card-title>
 
       <v-card-text>
-        <p class="text-body-small mb-3">Choose one resource for this step. {{ suitable }} within declared limits.</p>
+        <p class="text-body-small mb-3">Choose one resource for this step. {{ suitable }} within declared limits{{ later ? `, ${later} of them after a reconfiguration` : '' }}.</p>
         <v-alert v-if="error" class="mb-3" density="compact" type="warning">{{ error }}</v-alert>
         <p v-if="visible.length === 0" class="text-body-small">No resources offer these capabilities.</p>
 
@@ -32,6 +32,15 @@
           <div class="d-flex align-center flex-wrap ga-2 pa-3">
             <span class="text-body-small font-weight-bold">{{ resourceName(match.aasId) }}</span>
             <v-chip :color="status[match.status].color" size="small">{{ status[match.status].title }}</v-chip>
+
+            <v-chip
+              v-if="match.availability === 'AfterReconfiguration'"
+              color="info"
+              prepend-icon="mdi-wrench-clock"
+              size="small"
+              variant="tonal"
+            >After a reconfiguration</v-chip>
+
             <v-spacer />
 
             <v-btn
@@ -44,6 +53,11 @@
               @click="emit('assign', match)"
             >Use resource</v-btn>
           </div>
+
+          <p v-if="match.availability === 'AfterReconfiguration'" class="text-body-small px-3 pb-2">
+            {{ match.reconfigure.join(', ') || 'A skill' }} is described in the resource's AAS but not built yet: the module offers this once
+            it is built (modsync reconfigure). The step can be bound to it now.
+          </p>
 
           <v-expansion-panels v-if="match.reasons.length > 0" variant="accordion">
             <v-expansion-panel title="Comparison details">
@@ -69,8 +83,11 @@
     unknown: { title: 'Needs verification', color: 'warning' },
     mismatch: { title: 'Outside requirements', color: 'error' },
   }
-  const visible = computed(() => props.matches.filter(match => match.capabilities.length > 0).toSorted((a, b) => Number(b.status === 'match') - Number(a.status === 'match')))
+  // Matches first, of those the ones offered now.
+  const visible = computed(() => props.matches.filter(match => match.capabilities.length > 0).toSorted((a, b) => Number(b.status === 'match') - Number(a.status === 'match')
+    || Number(a.availability !== 'Now') - Number(b.availability !== 'Now')))
   const suitable = computed(() => visible.value.filter(match => match.status === 'match').length)
+  const later = computed(() => visible.value.filter(match => match.status === 'match' && match.availability === 'AfterReconfiguration').length)
 
   function resourceName (id: string): string {
     return props.resources.find(item => item.id === id)?.name ?? id
