@@ -8,7 +8,7 @@ import { field, members } from '../utils/sequenceModel'
 import fixture from './fixtures/fillingModule.json'
 import { assignSkill, flowIssues, handedParameter, readFlow, readSkills, withFlow, withNewSkill, withParameter } from './skillFlow'
 
-/** The filling module as iec61499-mgmt-py's modreg describes it (ARSO 0.8): its Skills submodel and those of its components. */
+/** The filling module as iec61499-mgmt-py's modreg describes it (ARSO 0.9): its Skills submodel and those of its components. */
 const base = 'https://smartproductionlab.aau.dk/aas'
 const submodel = (shell: string) => structuredClone((fixture.submodels as AasElement[]).find(model => model.id === `${base}/${shell}/submodels/Skills`)!)
 const moduleSkills = submodel('FillingModuleAAS')
@@ -56,7 +56,7 @@ describe('skills of a resource as flows', () => {
   it('writes steps back as the resource model has them', () => {
     for (const [skill, command] of [['Dispensing', 'Start'], ['Dispensing', 'Stop'], ['Reset', 'Start']] as const) {
       const saved = withFlow(moduleSkills, skill, command, readFlow(moduleSkills, skill, command), catalog)
-      expect(plain(field(child(saved, 'Skills', skill, command), 'Steps'))).toEqual(plain(field(child(moduleSkills, 'Skills', skill, command), 'Steps')))
+      expect(plain(field(child(saved, skill, command), 'Steps'))).toEqual(plain(field(child(moduleSkills, skill, command), 'Steps')))
       expect(verified(saved)).toEqual([])
     }
   })
@@ -75,12 +75,13 @@ describe('skills of a resource as flows', () => {
 
   it('describes a new skill from an existing one, not built yet', () => {
     const copy = withNewSkill(moduleSkills, 'Dispensing', 'DoubleDose')
-    const made = child(copy, 'Skills', 'DoubleDose')
-    expect(members(child(copy, 'Skills')).map(skill => skill.idShort).at(-1)).toBe('DoubleDose')
-    expect(members(made).find(item => item.idShort === 'SemanticId')!.value).toBe('https://smartproductionlab.aau.dk/skills/DoubleDose')
+    const made = child(copy, 'DoubleDose')
+    expect(members(copy).map(skill => skill.idShort).slice(-2)).toEqual(['DoubleDose', 'Errors'])
+    expect(made.supplementalSemanticIds.map((id: AasElement) => id.keys[0].value)).toEqual(
+      ['https://smartproductionlab.aau.dk/skill/Composite', 'https://smartproductionlab.aau.dk/skills/DoubleDose'])
     expect(members(child(made, 'Start')).map(item => item.idShort)).toEqual(['Start', 'Steps']) // no action calls it yet
     expect(JSON.stringify(made)).not.toContain('Dispensing')
-    expect(JSON.stringify(child(copy, 'Skills', 'Dispensing'))).toEqual(JSON.stringify(child(moduleSkills, 'Skills', 'Dispensing')))
+    expect(JSON.stringify(child(copy, 'Dispensing'))).toEqual(JSON.stringify(child(moduleSkills, 'Dispensing')))
     expect(() => withNewSkill(moduleSkills, 'Dispensing', 'Stop')).toThrow('cannot be the name')
     expect(() => withNewSkill(moduleSkills, 'Reset', 'Again')).toThrow('not a skill the module composes')
 
@@ -89,7 +90,7 @@ describe('skills of a resource as flows', () => {
     const steps = readFlow(copy, 'DoubleDose', 'Start') as StepNode[]
     const second = newNode('step') as StepNode
     assignSkill(second, catalog.find(skill => skill.idShort === 'Dispense')!, steps.map(step => step.id))
-    second.bindings.find(binding => binding.name === 'Volume')!.source = steps[1]!.bindings[0]!.source && { aasId: '', submodelId: copy.id, path: ['Skills', 'DoubleDose', 'Start', 'Start', 'Volume'] }
+    second.bindings.find(binding => binding.name === 'Volume')!.source = steps[1]!.bindings[0]!.source && { aasId: '', submodelId: copy.id, path: ['DoubleDose', 'Start', 'Start', 'Volume'] }
     steps.splice(2, 0, second)
     expect(second.id).toBe('Dispense_2')
     expect(flowIssues(steps, owner, catalog)).toEqual([])

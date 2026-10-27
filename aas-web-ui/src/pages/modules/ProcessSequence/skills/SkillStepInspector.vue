@@ -119,7 +119,7 @@
       node.value.bindings.push(found)
     }
     if (parameter) {
-      const reference = variableReference(props.owner.submodelId, props.owner.idShort, props.command, parameter)
+      const reference = variableReference(props.owner.reference, props.command, parameter)
       found.source = { aasId: '', submodelId: props.owner.submodelId, path: reference.keys.slice(1).map(key => key.value) }
       found.value = ''
     } else {

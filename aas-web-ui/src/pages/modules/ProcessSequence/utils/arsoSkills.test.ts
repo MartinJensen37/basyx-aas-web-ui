@@ -28,7 +28,7 @@ describe('ARSO resources and effective recipes', () => {
   it('reads all four skill collections and Start variables, excluding protocol fields', () => {
     expect(skills.map(skill => skill.idShort).toSorted()).toEqual(['Capping', 'Dispensing', 'Inspection', 'Stoppering'])
     expect(dispensing.parameters).toMatchObject([{ idShort: 'Volume', unit: 'mL', minValue: 0.5, maxValue: 10, defaultValue: '1.0' }])
-    expect(dispensing.parameters[0].reference!.keys.map(key => key.value).slice(1)).toEqual(['Skills', 'Dispensing', 'Start', 'Start', 'Volume'])
+    expect(dispensing.parameters[0].reference!.keys.map(key => key.value).slice(1)).toEqual(['Dispensing', 'Start', 'Start', 'Volume'])
     expect(dispensing.outputs!.map(output => output.idShort)).toEqual(['Weight'])
     expect(inspection.parameters).toEqual([])
     expect(inspection.outputs!.map(output => output.idShort)).toEqual(['TopPassed', 'SidePassed'])

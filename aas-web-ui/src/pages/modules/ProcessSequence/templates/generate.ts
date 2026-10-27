@@ -13,7 +13,7 @@ plan.schema = 'process-sequence-plan/5.0'
 if (filling.kind === 'step' && filling.process) {
   filling.process.parameters.find(parameter => parameter.name === 'FillVolume')!.value = '1.8'
   filling.resourceAasId = 'https://smartproductionlab.aau.dk/aas/FillingModuleAAS'
-  filling.skillReference = modelRef([{ type: 'Submodel', value: `${filling.resourceAasId}/submodels/Skills` }, { type: 'SubmodelElementCollection', value: 'Skills' }, { type: 'SubmodelElementCollection', value: 'Dispensing' }])
+  filling.skillReference = modelRef([{ type: 'Submodel', value: `${filling.resourceAasId}/submodels/Skills` }, { type: 'SubmodelElementCollection', value: 'Dispensing' }])
   const variable = (name: string) => modelRef([...filling.skillReference!.keys, { type: 'SubmodelElementCollection', value: 'Start' }, { type: 'Operation', value: 'Start' }, { type: 'Property', value: name }])
   filling.bindings = [{ name: 'Volume', value: '', source: filling.process.parameters.find(parameter => parameter.name === 'FillVolume')!.source, target: variable('Volume') }]
   filling.outputs = [{ id: 'measured-weight', name: 'Measured weight', type: 'number', unit: 'g', source: variable('Weight') }]

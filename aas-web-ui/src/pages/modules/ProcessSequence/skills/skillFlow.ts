@@ -5,7 +5,7 @@ import { PROCESS_SEQUENCE_IRI_BASE } from '../constants/contracts'
 import { children, collection, field, indexed, members, modelRef, ordered, prop, ref, sem, value } from '../utils/sequenceModel'
 
 /**
- * A resource's skills (ARSO 0.8) as the sequence editor's nodes, and back.
+ * A resource's skills (ARSO 0.9) as the sequence editor's nodes, and back.
  *
  * A skill of a module is its commands. What Start (and Stop) run is a flow in the elements of
  * Production Sequence: steps with NodeId, Kind, Name and Order; a step of the kind `step` runs a
@@ -37,6 +37,22 @@ export const RUNNABLE_KINDS: PlanNode['kind'][] = ['step']
 const IDENTIFIER = /^[A-Z]\w*$/i
 const child = (element: AasElement | undefined, idShort: string): AasElement | undefined => members(element ?? {}).find(item => item.idShort === idShort)
 const meaning = (element: AasElement | undefined): string => element?.semanticId?.keys?.[0]?.value ?? ''
+const isSkill = (element: AasElement): boolean => element.modelType === 'SubmodelElementCollection' && (meaning(element) === skillMeaning || meaning(element).startsWith(`${skillMeaning}/`))
+
+/** What holds the skills of a Skills submodel: the submodel itself since ARSO 0.9, its collection Skills before. */
+function skillHolder (submodel: AasElement): AasElement {
+  const inner = child(submodel, 'Skills')
+  return inner && !meaning(inner) ? inner : submodel
+}
+const skillOf = (submodel: AasElement, skill: string): AasElement | undefined => child(skillHolder(submodel), skill)
+/** The keys of the reference to a skill of a Skills submodel. */
+function skillKeys (submodel: AasElement, skill: string): CapabilityReference['keys'] {
+  return [
+    { type: 'Submodel', value: submodel.id },
+    ...(skillHolder(submodel) === submodel ? [] : [{ type: 'SubmodelElementCollection', value: 'Skills' }]),
+    { type: 'SubmodelElementCollection', value: skill },
+  ]
+}
 const qualifier = (element: AasElement, name: string): string | undefined => element.qualifiers?.find((item: AasElement) => item.type === name)?.value
 const lastKey = (reference?: CapabilityReference): string => reference?.keys.at(-1)?.value ?? ''
 const number = (raw: unknown): number | null => (raw != null && String(raw).trim() !== '' && Number.isFinite(Number(raw)) ? Number(raw) : null)
@@ -50,32 +66,33 @@ export function skillKind (element: AasElement): SkillKind {
   return kinds.find(kind => stated.has(`${skillMeaning}/${kind}`)) ?? 'Primitive'
 }
 
-/** The reference to a variable of a command's Operation in a Skills submodel. */
-export function variableReference (submodelId: string, skill: string, command: string, variable: string): CapabilityReference {
+/** The reference to a variable of a command's Operation, from the reference to its skill. */
+export function variableReference (skill: CapabilityReference, command: string, variable: string): CapabilityReference {
   return modelRef([
-    { type: 'Submodel', value: submodelId }, { type: 'SubmodelElementCollection', value: 'Skills' },
-    { type: 'SubmodelElementCollection', value: skill }, { type: 'SubmodelElementCollection', value: command },
+    ...skill.keys, { type: 'SubmodelElementCollection', value: command },
     { type: 'Operation', value: command }, { type: 'Property', value: variable },
   ])
 }
 
 /** The skills of one Skills submodel, with the variables of their Start operation. */
 export function readSkills (submodel: AasElement, aasId = ''): ResourceSkill[] {
-  const read = (skill: AasElement, direction: 'inputVariables' | 'outputVariables'): SkillParameter[] =>
+  const read = (skill: AasElement, direction: 'inputVariables' | 'outputVariables', reference: CapabilityReference): SkillParameter[] =>
     (child(child(skill, 'Start'), 'Start')?.[direction] ?? []).map((item: AasElement) => item.value).filter((variable: AasElement) => variable?.modelType === 'Property' && meaning(variable) !== protocolMeaning).map((variable: AasElement) => ({
       idShort: variable.idShort, name: variable.idShort, dataType: variable.valueType,
       unit: qualifier(variable, 'Unit') ?? variable.embeddedDataSpecifications?.find((spec: AasElement) => spec.dataSpecificationContent?.unit)?.dataSpecificationContent?.unit ?? '',
       minValue: number(qualifier(variable, 'Minimum')), maxValue: number(qualifier(variable, 'Maximum')),
       defaultValue: qualifier(variable, 'Default') ?? variable.value ?? null,
-      reference: variableReference(submodel.id, skill.idShort, 'Start', variable.idShort),
+      reference: variableReference(reference, 'Start', variable.idShort),
     }))
-  return members(child(submodel, 'Skills') ?? {}).filter(skill => skill.modelType === 'SubmodelElementCollection').map(skill => ({
-    idShort: skill.idShort, kind: skillKind(skill), aasId, submodelId: submodel.id,
-    description: skill.description?.find((item: AasElement) => item.language === 'en')?.text ?? '',
-    reference: modelRef([{ type: 'Submodel', value: submodel.id }, { type: 'SubmodelElementCollection', value: 'Skills' }, { type: 'SubmodelElementCollection', value: skill.idShort }]),
-    inputs: read(skill, 'inputVariables'), outputs: read(skill, 'outputVariables'),
-    flows: (['Start', 'Stop'] as SkillCommand[]).filter(command => field(child(skill, command) ?? {}, 'Steps')),
-  }))
+  return members(skillHolder(submodel)).filter(skill => isSkill(skill)).map(skill => {
+    const reference = modelRef(skillKeys(submodel, skill.idShort))
+    return {
+      idShort: skill.idShort, kind: skillKind(skill), aasId, submodelId: submodel.id,
+      description: skill.description?.find((item: AasElement) => item.language === 'en')?.text ?? '',
+      reference, inputs: read(skill, 'inputVariables', reference), outputs: read(skill, 'outputVariables', reference),
+      flows: (['Start', 'Stop'] as SkillCommand[]).filter(command => field(child(skill, command) ?? {}, 'Steps')),
+    }
+  })
 }
 
 function readSteps (steps: AasElement | undefined): PlanNode[] {
@@ -114,7 +131,7 @@ function readSteps (steps: AasElement | undefined): PlanNode[] {
 
 /** What a command of a skill runs, as nodes of the sequence editor. */
 export function readFlow (submodel: AasElement, skill: string, command: SkillCommand): PlanNode[] {
-  return readSteps(field(child(child(child(submodel, 'Skills'), skill), command) ?? {}, 'Steps'))
+  return readSteps(field(child(skillOf(submodel, skill), command) ?? {}, 'Steps'))
 }
 
 /** The name of the parameter of the skill a binding hands down, if it hands one down. */
@@ -229,7 +246,7 @@ function buildSteps (nodes: PlanNode[], submodelId: string, owner: ResourceSkill
           const input = skill?.inputs.find(item => item.idShort === binding.name)
           return collection(indexed('Binding', order), [
             prop('Name', binding.name),
-            handed ? ref('SourceElement', variableReference(submodelId, owner.idShort, command, handed)) : prop('Value', binding.value, input?.dataType ?? 'xs:double'),
+            handed ? ref('SourceElement', variableReference(owner.reference, command, handed)) : prop('Value', binding.value, input?.dataType ?? 'xs:double'),
             ...(binding.target ? [ref('InputReference', binding.target)] : []),
           ], 'Binding')
         })))
@@ -254,7 +271,7 @@ function buildSteps (nodes: PlanNode[], submodelId: string, owner: ResourceSkill
 export function withFlow (submodel: AasElement, skill: string, command: SkillCommand, nodes: PlanNode[], catalog: ResourceSkill[]): AasElement {
   const copy = plainCopy(submodel)
   const owner = readSkills(copy).find(item => item.idShort === skill)
-  const held = child(child(child(copy, 'Skills'), skill), command)
+  const held = child(skillOf(copy, skill), command)
   if (!owner || !held) {
     throw new Error(`${skill} has no ${command} command.`)
   }
@@ -268,7 +285,7 @@ export function withFlow (submodel: AasElement, skill: string, command: SkillCom
 /** Change the default or the limits of a parameter of a skill (the variable of its Start operation). */
 export function withParameter (submodel: AasElement, skill: string, parameter: string, change: { defaultValue?: string, minValue?: string, maxValue?: string }): AasElement {
   const copy = plainCopy(submodel)
-  const operation = child(child(child(child(copy, 'Skills'), skill), 'Start'), 'Start')
+  const operation = child(child(skillOf(copy, skill), 'Start'), 'Start')
   const variable = (operation?.inputVariables ?? []).map((item: AasElement) => item.value).find((item: AasElement) => item.idShort === parameter)
   if (!variable) {
     throw new Error(`${skill} has no parameter ${parameter}.`)
@@ -301,14 +318,15 @@ export function withParameter (submodel: AasElement, skill: string, parameter: s
  */
 export function withNewSkill (submodel: AasElement, from: string, name: string): AasElement {
   const copy = plainCopy(submodel)
-  const skills = child(copy, 'Skills')
+  const skills = skillHolder(copy)
   const source = child(skills, from)
-  if (!IDENTIFIER.test(name) || !skills || !source || child(skills, name)) {
+  if (!IDENTIFIER.test(name) || !source || child(skills, name)) {
     throw new Error(`${name} cannot be the name of a new skill: it has to be an identifier no skill of the module has.`)
   }
   if (skillKind(source) !== 'Composite') {
     throw new Error(`${from} is not a skill the module composes.`)
   }
+  const own = skillKeys(copy, from).map(key => key.value)
   const renamed = (text: string) => text.replaceAll(`/skills/${from}/`, `/skills/${name}/`).replace(new RegExp(`/skills/${from}$`), `/skills/${name}`)
   function rename (element: any): any {
     if (Array.isArray(element)) {
@@ -316,8 +334,8 @@ export function withNewSkill (submodel: AasElement, from: string, name: string):
     }
     if (element && typeof element === 'object') {
       if (element.type === 'ModelReference' && Array.isArray(element.keys)) {
-        const own = element.keys[0]?.value === copy.id && element.keys[1]?.value === 'Skills' && element.keys[2]?.value === from
-        return { ...element, keys: element.keys.map((key: AasElement, index: number) => (own && index === 2 ? { ...key, value: name } : key)) }
+        const mine = own.every((value, index) => element.keys[index]?.value === value)
+        return { ...element, keys: element.keys.map((key: AasElement, index: number) => (mine && index === own.length - 1 ? { ...key, value: name } : key)) }
       }
       return Object.fromEntries(Object.entries(element).map(([key, item]) => [key, key === 'description' ? describe(item) : rename(item)]))
     }
@@ -335,6 +353,8 @@ export function withNewSkill (submodel: AasElement, from: string, name: string):
       delete operation.qualifiers // the delegation to an action that is not there
     }
   }
-  skills.value.push(made)
+  // After the last skill, before what else the submodel holds (its Errors).
+  const held = members(skills)
+  held.splice(held.reduce((last, item, index) => (isSkill(item) ? index : last), -1) + 1, 0, made)
   return copy
 }

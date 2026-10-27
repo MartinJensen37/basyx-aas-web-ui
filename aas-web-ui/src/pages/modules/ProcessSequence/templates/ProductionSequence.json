@@ -509,10 +509,6 @@
                           },
                           {
                             "type": "SubmodelElementCollection",
-                            "value": "Skills"
-                          },
-                          {
-                            "type": "SubmodelElementCollection",
                             "value": "Dispensing"
                           },
                           {
@@ -946,10 +942,6 @@
                   },
                   {
                     "type": "SubmodelElementCollection",
-                    "value": "Skills"
-                  },
-                  {
-                    "type": "SubmodelElementCollection",
                     "value": "Dispensing"
                   }
                 ]
@@ -1174,10 +1166,6 @@
                           {
                             "type": "Submodel",
                             "value": "https://smartproductionlab.aau.dk/aas/FillingModuleAAS/submodels/Skills"
-                          },
-                          {
-                            "type": "SubmodelElementCollection",
-                            "value": "Skills"
                           },
                           {
                             "type": "SubmodelElementCollection",

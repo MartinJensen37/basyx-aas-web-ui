@@ -36,7 +36,7 @@ export function buildArsoFixture () {
   for (const configuration of configurations) {
     const { operation, skill } = configuration
     const owner = `${operation}ModuleAAS`
-    const skillRef = modelRef([{ type: 'Submodel', value: smId(owner, 'Skills') }, ...['Skills', skill].map(value => ({ type: 'SubmodelElementCollection', value }))])
+    const skillRef = modelRef([{ type: 'Submodel', value: smId(owner, 'Skills') }, { type: 'SubmodelElementCollection', value: skill }])
     const limits: Limit[] = [{ name: 'ContainerType', value: 'vial', required: 'vial' }, { name: 'GraspDiameter', min: '6.0', max: '30.0', required: '16.0', unit: 'mm' }, ...configuration.limits]
     for (const required of [false, true]) {
       const capability = { modelType: 'Capability', idShort: 'Capability', semanticId: sem(capabilitySemantic('Capability')), supplementalSemanticIds: [sem(meaning(operation))], qualifiers: [{ type: `CapabilityRoleQualifier/${required ? 'Required' : 'Offered'}`, kind: 'ConceptQualifier', valueType: 'xs:boolean', value: 'true', semanticId: sem(capabilitySemantic(`CapabilityRoleQualifier/${required ? 'Required' : 'Offered'}`)) }] }
@@ -70,7 +70,7 @@ export function buildArsoFixture () {
       }
     }
     const startMeaning = `${domain}/skill/Start`
-    submodels.push(submodel(owner, 'Skills', ARSO_SKILLS_SUBMODEL, [collection('Skills', [collection(skill, [collection('Start', [{ modelType: 'Operation', idShort: 'Start', semanticId: sem(startMeaning), inputVariables: inputs, outputVariables: outputs }], startMeaning)], `${domain}/skill/Composite`)])]))
+    submodels.push(submodel(owner, 'Skills', ARSO_SKILLS_SUBMODEL, [collection(skill, [collection('Start', [{ modelType: 'Operation', idShort: 'Start', semanticId: sem(startMeaning), inputVariables: inputs, outputVariables: outputs }], startMeaning)], `${domain}/skill/Composite`)]))
     shells.push({ modelType: 'AssetAdministrationShell', id: `${ARSO_FIXTURE_BASE}/${owner}`, idShort: owner, assetInformation: { assetKind: 'Instance', globalAssetId: `urn:fixture:asset:${owner}` }, submodels: ['Skills', 'CapabilityDescription'].map(name => modelRef([{ type: 'Submodel', value: smId(owner, name) }])) })
     processes.push(collection(operation, [property('ProcessId', operation, 'xs:string', processParameterSemantic('ProcessId')), property('ProcessName', operation, 'xs:string', processParameterSemantic('ProcessName')), collection('ProductParameters', limits.filter(limit => limit.required !== undefined).map(limit => ({ ...property(limit.name, limit.required, limit.unit ? 'xs:double' : 'xs:string', meaning(limit.name)), ...units(limit.name, limit.unit) })), processParameterSemantic('ProductParameters')), { modelType: 'ReferenceElement', idShort: 'RequiredCapability', semanticId: sem(PROCESS_STEP_CAPABILITY_SEMANTIC_ID), value: capabilityRef('Vial2mLAAS', operation, true) }], processParameterSemantic('Process')))
   }
