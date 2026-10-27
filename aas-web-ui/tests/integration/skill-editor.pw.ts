@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { expect, test } from '@playwright/test'
+import flowFixture from '../../src/pages/modules/ProcessSequence/skills/fixtures/fillingFlows.json' with { type: 'json' }
 import fixture from '../../src/pages/modules/ProcessSequence/skills/fixtures/fillingModule.json' with { type: 'json' }
 
 /**
@@ -101,5 +102,50 @@ test('the Skills submodel opens on the overview, a skill in the editor', async (
   expect(made.value.find((item: { idShort: string }) => item.idShort === 'Deployment').value).toBe('Described')
   if (shots) {
     await page.screenshot({ path: `${shots}/skill-new.png`, fullPage: true })
+  }
+})
+
+test('a skill with decisions shows them, and a decision its condition', async ({ page, request }) => {
+  test.setTimeout(180_000)
+  const flows = JSON.parse(JSON.stringify(flowFixture)
+    .replaceAll('https://smartproductionlab.aau.dk/aas/', `${prefix}-flows/aas/`)
+    .replaceAll('https://smartproductionlab.aau.dk/assets/', `${prefix}-flows/assets/`)) as typeof flowFixture
+  const shellId = `${prefix}-flows/aas/FillingModuleAAS`
+  for (const [collection, models] of [['submodels', flows.submodels], ['shells', flows.assetAdministrationShells]] as const) {
+    for (const data of models) {
+      const response = await request.post(`${repository}/${collection}`, { data })
+      expect(response.ok(), await response.text()).toBe(true)
+    }
+  }
+  try {
+    await page.setViewportSize({ width: 1720, height: 1080 })
+    await page.route('**/shells?*', async route => {
+      const response = await route.fetch()
+      const body = await response.json()
+      if (Array.isArray(body.result)) {
+        body.result = body.result.filter((shell: { id: string }) => shell.id.startsWith(`${prefix}-flows`))
+      }
+      await route.fulfill({ response, json: body })
+    })
+    await page.addInitScript(repository => {
+      localStorage.setItem('basyxInfrastructures', JSON.stringify({ selectedInfrastructureId: 'skills-test', infrastructures: [{ id: 'skills-test', name: 'Skills test', template: 'mono-repo', isDefault: true, auth: { securityType: 'No Authentication' }, components: Object.fromEntries(['AASDiscovery', 'AASRegistry', 'SubmodelRegistry', 'AASRepo', 'SubmodelRepo', 'ConceptDescriptionRepo', 'CompanyLookup'].map(key => [key, { url: ['AASRepo', 'SubmodelRepo', 'ConceptDescriptionRepo'].includes(key) ? repository : '' }])) }] }))
+    }, repository!)
+    const skills = `${shellId}/submodels/Skills`
+    await page.goto(`/aasviewer?aas=${encodeURIComponent(`${repository}/shells/${encode(shellId)}`)}&path=${encodeURIComponent(`${repository}/submodels/${encode(skills)}/submodel-elements/Checked`)}`)
+    await page.getByText('Visualization', { exact: true }).click()
+    await expect(page.getByText('Module level skill')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('If Weigh.Weight < 2.5').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Light', exact: true }).click()
+    await expect(page.getByText('When the condition holds, Yes runs, else No.')).toBeVisible()
+    await expect(page.getByLabel('Compare')).toBeVisible()
+    if (shots) {
+      await page.screenshot({ path: `${shots}/skill-decision.png`, fullPage: true })
+    }
+  } finally {
+    for (const [collection, models] of [['shells', flows.assetAdministrationShells], ['submodels', flows.submodels]] as const) {
+      for (const model of models) {
+        await request.delete(`${repository}/${collection}/${encode(model.id)}`, { maxRetries: 2 })
+      }
+    }
   }
 })

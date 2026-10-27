@@ -6,8 +6,26 @@
         prepend-icon="mdi-plus"
         size="small"
         variant="tonal"
-        @click="add"
+        @click="add('step')"
       >Add step</v-btn>
+
+      <v-menu>
+        <template #activator="{ props: activator }">
+          <v-btn
+            v-bind="activator"
+            :disabled="readonly"
+            prepend-icon="mdi-source-branch"
+            size="small"
+            variant="text"
+          >Add a block</v-btn>
+        </template>
+
+        <v-list density="compact">
+          <v-list-item title="Parallel block: branches at once" @click="add('parallel')" />
+          <v-list-item title="Decision: one of two branches" @click="add('decision')" />
+          <v-list-item title="Conditional steps: only when a condition holds" @click="add('conditional')" />
+        </v-list>
+      </v-menu>
 
       <span class="text-caption text-medium-emphasis flex-grow-1 px-2">{{ insertionLabel }}</span>
 
@@ -62,8 +80,8 @@
         <template #node-plan="{ data, id }">
           <div
             class="skill-node"
-            :class="{ 'skill-node--selected': data.planId ? data.planId === selectedId : !selectedId && id === insertionId, 'skill-node--marker': !data.planId }"
-            :style="{ height: `${data.height ?? graphNodeHeight[data.kind as PlanGraphData['kind']]}px` }"
+            :class="{ 'skill-node--selected': data.planId ? data.planId === selectedId : (data.branchId ? data.branchId === selectedId : !selectedId && id === insertionId), 'skill-node--marker': !data.planId }"
+            :style="{ height: `${data.height ?? sizes[data.kind as keyof typeof sizes] ?? graphNodeHeight[data.kind as PlanGraphData['kind']]}px` }"
           >
             <Handle v-if="data.kind !== 'start'" id="flow-in" :position="Position.Top" type="target" />
 
@@ -82,14 +100,15 @@
 </template>
 
 <script setup lang="ts">
-  import type { PlanNode, StepNode } from '../types/plan'
+  import type { PlanCondition, PlanNode, StepNode } from '../types/plan'
   import type { PlanGraphData } from '../utils/planGraph'
   import { Background } from '@vue-flow/background'
   import { Controls } from '@vue-flow/controls'
   import { Handle, Position, useVueFlow, VueFlow } from '@vue-flow/core'
+  import { newComparison } from '../utils/conditions'
   import { flattenNodes, newNode } from '../utils/plan'
   import { buildPlanGraph, findLane, graphNodeHeight } from '../utils/planGraph'
-  import { handedParameter } from './skillFlow'
+  import { handedParameter, instanceName } from './skillFlow'
   import '@vue-flow/core/dist/style.css'
   import '@vue-flow/core/dist/theme-default.css'
   import '@vue-flow/controls/dist/style.css'
@@ -101,17 +120,31 @@
   const { fitView } = useVueFlow({ id: flowId })
   const insertionId = ref('end')
 
-  // A step card holds three short lines: its name, what it runs, what it is handed.
-  const graph = computed(() => buildPlanGraph(nodes.value, [], props.selectedId, [], false, { step: 76 }))
+  // A card holds three short lines: its name, what it runs or decides, what it is handed.
+  const sizes = { step: 76, parallel: 64, decision: 76, conditional: 76, branch: 40, join: 40, merge: 40, skip: 40, start: 40, end: 40 }
+  const graph = computed(() => buildPlanGraph(nodes.value, [], props.selectedId, [], false, sizes))
   const steps = computed(() => new Map(flattenNodes(nodes.value).map(node => [node.id, node])))
   const selected = computed(() => steps.value.get(props.selectedId))
   const location = computed(() => findLane(nodes.value, props.selectedId))
-  const insertionLabel = computed(() => (selected.value ? `Insert after ${selected.value.name}` : 'Append to the end: select a step to insert after it'))
+  const insertionLabel = computed(() => {
+    if (selected.value) return `Insert after ${selected.value.name}`
+    if (location.value?.index === -1) return 'Insert at the start of the branch'
+    return 'Append to the end: select a step to insert after it'
+  })
 
   function runs (id: string): string {
     const node = steps.value.get(id)
+    if (node?.kind === 'decision' || node?.kind === 'conditional') return `If ${conditionText(node.condition)}`
+    if (node?.kind === 'parallel') return `${node.branches.length} branches at once`
     if (node?.kind !== 'step') return node?.kind ?? ''
     return node.skillId ? `${node.skillId} (${node.resourceAasId.split('/').at(-1)?.replace(/AAS$/, '') ?? ''})` : 'No skill chosen'
+  }
+
+  function conditionText (condition: PlanCondition): string {
+    if ('conditions' in condition) return condition.conditions.map(rule => conditionText(rule)).join(condition.kind === 'all' ? ' and ' : ' or ')
+    if (condition.kind !== 'comparison') return 'every N-th run'
+    const what = condition.operand ? (condition.operand.kind === 'output' ? `${condition.operand.stepId}.${condition.operand.outputId}` : condition.operand.source.path.at(-1)) : '…'
+    return `${what} ${{ eq: '=', ne: '≠', gt: '>', gte: '≥', lt: '<', lte: '≤' }[condition.operator]} ${condition.expected.value}`
   }
 
   function handed (id: string): string {
@@ -127,11 +160,21 @@
 
   function select (id: string, data: PlanGraphData): void {
     insertionId.value = id
-    emit('select', data.planId ?? '')
+    // A branch's header: insert at its start.
+    emit('select', data.planId ?? data.branchId ?? '')
   }
 
-  function add (): void {
-    const node = newNode('step')
+  function add (kind: 'step' | 'parallel' | 'decision' | 'conditional'): void {
+    const node = newNode(kind)
+    if (node.kind !== 'step') {
+      // A block is named like its instance in the control program.
+      const name = instanceName({ parallel: 'Parallel', decision: 'Decision', conditional: 'Optional' }[node.kind as 'parallel'], [...steps.value.keys()])
+      node.id = name
+      node.name = name
+    }
+    if (node.kind === 'conditional') {
+      node.condition = newComparison()
+    }
     const lane = location.value
     if (lane) lane.nodes.splice(lane.index + 1, 0, node)
     else nodes.value.push(node)

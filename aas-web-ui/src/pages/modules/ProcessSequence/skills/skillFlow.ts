@@ -2,7 +2,9 @@ import type { SkillParameter } from '../types'
 import type { CapabilityReference, PlanNode, StepNode } from '../types/plan'
 import type { AasElement } from '../utils/sequenceModel'
 import { PROCESS_SEQUENCE_IRI_BASE } from '../constants/contracts'
+import { flattenNodes } from '../utils/plan'
 import { children, collection, field, indexed, members, modelRef, ordered, prop, ref, sem, value } from '../utils/sequenceModel'
+import { always, conditionIssues, operandOptions, readSkillCondition, skillConditionElement } from './skillConditions'
 
 /**
  * A resource's skills (ARSO 0.10) as the sequence editor's nodes, and back.
@@ -36,8 +38,8 @@ export type ResourceSkill = {
 export const skillMeaning = `${PROCESS_SEQUENCE_IRI_BASE}/skill`
 const protocolMeaning = `${PROCESS_SEQUENCE_IRI_BASE}/ControlComponent/Skill/OperationVariable/1/0`
 const kinds: SkillKind[] = ['Primitive', 'Composite', 'ModuleControl']
-/** What a module built by the module rules can run; ARSO describes more kinds of step. */
-export const RUNNABLE_KINDS: PlanNode['kind'][] = ['step']
+/** What a module built by the module rules can run (rule set 2: parallel blocks and decisions); not calls. */
+export const RUNNABLE_KINDS: PlanNode['kind'][] = ['step', 'parallel', 'decision', 'conditional']
 const IDENTIFIER = /^[A-Z]\w*$/i
 const child = (element: AasElement | undefined, idShort: string): AasElement | undefined => members(element ?? {}).find(item => item.idShort === idShort)
 const meaning = (element: AasElement | undefined): string => element?.semanticId?.keys?.[0]?.value ?? ''
@@ -110,11 +112,19 @@ function readSteps (steps: AasElement | undefined): PlanNode[] {
   return ordered(members(steps ?? {})).map((step): PlanNode => {
     const id = value(step, 'NodeId') || step.idShort
     const kind = value(step, 'Kind') || 'step'
+    const branches = () => ordered(children(step, 'Branches')).map(branch => ({ id: value(branch, 'BranchId'), name: value(branch, 'Name'), nodes: readSteps(field(branch, 'Steps')) }))
     if (kind === 'parallel') {
-      return {
-        id, kind, name: value(step, 'Name'),
-        branches: ordered(children(step, 'Branches')).map(branch => ({ id: value(branch, 'BranchId'), name: value(branch, 'Name'), nodes: readSteps(field(branch, 'Steps')) })),
+      return { id, kind, name: value(step, 'Name') || id, branches: branches() }
+    }
+    if (kind === 'decision') {
+      const [yes, no] = branches()
+      if (!yes || !no) {
+        throw new Error(`Step ${id}: a decision has two branches.`)
       }
+      return { id, kind, name: value(step, 'Name') || id, condition: readSkillCondition(field(step, 'Condition') ?? {}), branches: [yes, no] }
+    }
+    if (kind === 'conditional') {
+      return { id, kind, name: value(step, 'Name') || id, condition: readSkillCondition(field(step, 'Condition') ?? {}), nodes: readSteps(field(step, 'Steps')) }
     }
     if (kind !== 'step') {
       throw new Error(`Step ${id} is of the kind ${kind}, which the skill editor does not show yet.`)
@@ -203,14 +213,59 @@ function bindingIssues (node: StepNode, skill: ResourceSkill, owner: ResourceSki
   return issues
 }
 
+/** What is wrong with a parallel block, a decision or a conditional step of a flow. */
+function blockIssues (node: PlanNode, nodes: PlanNode[], owner: ResourceSkill | undefined, catalog: ResourceSkill[]): string[] {
+  const issues: string[] = []
+  if (node.kind === 'parallel') {
+    if (node.branches.length < 2 || node.branches.length > 4) {
+      issues.push(`${node.name}: a parallel block has two to four branches.`)
+    }
+    if (node.branches.some(branch => branch.nodes.length === 0)) {
+      issues.push(`${node.name}: every branch needs a step.`)
+    }
+    // Each step holds the skill's equipment under the skill's name: two branches would command one item at once.
+    const used = node.branches.map(branch => new Set(flattenNodes(branch.nodes).flatMap(item => (item.kind === 'step' && item.resourceAasId ? [item.resourceAasId] : []))))
+    for (const [i, a] of used.entries()) {
+      for (const b of used.slice(i + 1)) {
+        const shared = [...a].filter(item => b.has(item))
+        if (shared.length > 0) {
+          issues.push(`${node.name}: two branches use ${shared.map(item => item.split('/').at(-1)).join(', ')}; a component runs one step at a time.`)
+        }
+      }
+    }
+  } else if (node.kind === 'decision' || node.kind === 'conditional') {
+    if ((node.kind === 'decision' ? node.branches[0].nodes : node.nodes).length === 0) {
+      issues.push(`${node.name}: the branch that runs when the condition holds needs a step.`)
+    }
+    issues.push(...conditionIssues(node.condition, node, operandOptions(nodes, node.id, owner, catalog)))
+  }
+  return issues
+}
+
 /** Why a flow cannot be saved or built, in the words of the module rules. */
 export function flowIssues (nodes: PlanNode[], owner: ResourceSkill | undefined, catalog: ResourceSkill[], command: SkillCommand = 'Start'): string[] {
   const issues: string[] = []
   const seen = new Set<string>()
   const given = new Set<string>()
-  for (const node of nodes) {
+  const runsAlways = new Set(always(nodes).map(node => node.id))
+  for (const node of flattenNodes(nodes)) {
+    if (node.kind === 'step' || !RUNNABLE_KINDS.includes(node.kind)) {
+      continue
+    }
+    if (!IDENTIFIER.test(node.id) || seen.has(node.id)) {
+      issues.push(`${node.name || 'A block'}: the name has to start with a letter, use letters, digits and _ only, and be unique in the skill.`)
+    }
+    seen.add(node.id)
+    issues.push(...blockIssues(node, nodes, owner, catalog))
+  }
+  for (const node of flattenNodes(nodes)) {
+    if (node.kind === 'step' && (node.outputs?.length ?? 0) > 0 && !runsAlways.has(node.id)) {
+      issues.push(`${node.name}: a result of the skill comes from a step that runs on every path, not from one inside a decision.`)
+    }
+  }
+  for (const node of flattenNodes(nodes)) {
     if (!RUNNABLE_KINDS.includes(node.kind)) {
-      issues.push(`${node.name}: a ${node.kind} step is described by the model, but the module's control runs steps one after the other only.`)
+      issues.push(`${node.name}: a ${node.kind} step is described by the model, but a module's control does not run it.`)
       continue
     }
     if (node.kind !== 'step') {
@@ -242,34 +297,54 @@ function buildSteps (nodes: PlanNode[], submodelId: string, owner: ResourceSkill
     : `${PROCESS_SEQUENCE_IRI_BASE}/skills/${owner.idShort}/${command === 'Start' ? 'Execute' : 'Stopping'}`
   return collection('Steps', nodes.map((node, index) => {
     const common = [prop('NodeId', node.id), prop('Kind', node.kind), prop('Name', node.name), prop('Order', index, 'xs:nonNegativeInteger')]
-    if (node.kind === 'parallel') {
-      common.push(collection('Branches', node.branches.map((branch, order) => collection(indexed('Branch', order), [
-        prop('BranchId', branch.id), prop('Name', branch.name), prop('Order', order, 'xs:nonNegativeInteger'), buildSteps(branch.nodes, submodelId, owner, command, catalog),
-      ], 'Branch'))))
-    } else if (node.kind === 'step') {
-      const skill = catalog.find(item => item.idShort === node.skillId)
-      if (node.skillReference) {
-        common.push(ref('Skill', node.skillReference))
+    switch (node.kind) {
+      case 'parallel': {
+        common.push(collection('Branches', node.branches.map((branch, order) => collection(indexed('Branch', order), [
+          prop('BranchId', branch.id), prop('Name', branch.name), prop('Order', order, 'xs:nonNegativeInteger'), buildSteps(branch.nodes, submodelId, owner, command, catalog),
+        ], 'Branch'))))
+
+        break
       }
-      if (node.bindings.length > 0) {
-        common.push(collection('Bindings', node.bindings.map((binding, order) => {
-          const handed = handedParameter(binding)
-          const input = skill?.inputs.find(item => item.idShort === binding.name)
-          return collection(indexed('Binding', order), [
-            prop('Name', binding.name),
-            handed ? ref('SourceElement', variableReference(owner.reference, command, handed)) : prop('Value', binding.value, input?.dataType ?? 'xs:double'),
-            ...(binding.target ? [ref('InputReference', binding.target)] : []),
-          ], 'Binding')
-        })))
+      case 'step': {
+        const skill = catalog.find(item => item.idShort === node.skillId)
+        if (node.skillReference) {
+          common.push(ref('Skill', node.skillReference))
+        }
+        if (node.bindings.length > 0) {
+          common.push(collection('Bindings', node.bindings.map((binding, order) => {
+            const handed = handedParameter(binding)
+            const input = skill?.inputs.find(item => item.idShort === binding.name)
+            return collection(indexed('Binding', order), [
+              prop('Name', binding.name),
+              handed ? ref('SourceElement', variableReference(owner.reference, command, handed)) : prop('Value', binding.value, input?.dataType ?? 'xs:double'),
+              ...(binding.target ? [ref('InputReference', binding.target)] : []),
+            ], 'Binding')
+          })))
+        }
+        if (node.outputs?.length) {
+          common.push(collection('Outputs', node.outputs.map((output, order) => collection(indexed('Output', order), [
+            prop('OutputId', output.id), prop('Name', output.name), prop('DataType', output.type), prop('Unit', output.unit),
+            ...(output.source ? [ref('ResultReference', output.source)] : []),
+          ], 'Output'))))
+        }
+
+        break
       }
-      if (node.outputs?.length) {
-        common.push(collection('Outputs', node.outputs.map((output, order) => collection(indexed('Output', order), [
-          prop('OutputId', output.id), prop('Name', output.name), prop('DataType', output.type), prop('Unit', output.unit),
-          ...(output.source ? [ref('ResultReference', output.source)] : []),
-        ], 'Output'))))
+      case 'decision': {
+        common.push(skillConditionElement(node.condition, owner, command), collection('Branches', node.branches.map((branch, order) => collection(indexed('Branch', order), [
+          prop('BranchId', branch.id), prop('Name', branch.name), prop('Order', order, 'xs:nonNegativeInteger'), buildSteps(branch.nodes, submodelId, owner, command, catalog),
+        ], 'Branch'))))
+
+        break
       }
-    } else {
-      throw new Error(`A ${node.kind} step cannot be saved in a skill yet.`)
+      case 'conditional': {
+        common.push(skillConditionElement(node.condition, owner, command), buildSteps(node.nodes, submodelId, owner, command, catalog))
+
+        break
+      }
+      default: {
+        throw new Error(`A ${node.kind} step cannot be saved in a skill: a module does not run it.`)
+      }
     }
     const step = collection(indexed('Step', index), common, 'Step')
     // What the step's instance in the program is called: its state is the data point named from there.

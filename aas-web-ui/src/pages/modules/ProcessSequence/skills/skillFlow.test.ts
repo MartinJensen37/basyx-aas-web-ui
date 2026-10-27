@@ -70,7 +70,8 @@ describe('skills of a resource as flows', () => {
     expect(flowIssues(steps, wide, catalog)[0]).toContain('allows more than Dispense takes for Volume')
     const added = newNode('step') as StepNode
     expect(flowIssues([...steps, added], dispensing, catalog).at(-1)).toContain('choose the skill of a component')
-    expect(flowIssues([...steps, newNode('parallel')], dispensing, catalog).at(-1)).toContain('the module\'s control runs steps one after the other only')
+    expect(flowIssues([...steps, newNode('parallel')], dispensing, catalog)).toContain('Run in parallel: every branch needs a step.')
+    expect(flowIssues([...steps, newNode('call')], dispensing, catalog).at(-1)).toContain('does not run it')
   })
 
   it('describes a new skill from an existing one, not built yet', () => {

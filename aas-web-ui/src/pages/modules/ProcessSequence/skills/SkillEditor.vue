@@ -99,8 +99,17 @@
         </v-col>
 
         <v-col class="border-s" cols="12" md="4">
+          <SkillBlockInspector
+            v-if="block && owner"
+            :catalog="catalog"
+            :node="block"
+            :nodes="nodes"
+            :owner="owner"
+            :taken="taken"
+          />
+
           <SkillStepInspector
-            v-if="step"
+            v-else-if="step"
             :catalog="catalog"
             :command="command"
             :node="step"
@@ -161,6 +170,7 @@
   import type { ResourceSkill, SkillCommand } from './skillFlow'
   import { useRoute, useRouter } from 'vue-router'
   import { flattenNodes } from '../utils/plan'
+  import SkillBlockInspector from './SkillBlockInspector.vue'
   import { flowIssues, readFlow, readSkills, withFlow, withNewSkill, withParameter } from './skillFlow'
   import SkillFlowGraph from './SkillFlowGraph.vue'
   import { parameterLine } from './skillOverview'
@@ -199,6 +209,8 @@
   const catalog = computed(() => [...own.value, ...components.value])
   const owner = computed(() => own.value.find(item => item.idShort === props.skill))
   const step = computed(() => flattenNodes(nodes.value).find(node => node.id === selectedId.value && node.kind === 'step') as StepNode | undefined)
+  const block = computed(() => flattenNodes(nodes.value).find(node => node.id === selectedId.value
+    && ['parallel', 'decision', 'conditional'].includes(node.kind)) as Exclude<PlanNode, { kind: 'step' | 'call' }> | undefined)
   const taken = computed(() => flattenNodes(nodes.value).map(node => node.id))
   // Only once the components' skills are known: before, every step would run an unknown skill.
   const issues = computed(() => (loaded.value && owner.value?.kind !== 'Primitive' ? flowIssues(nodes.value, owner.value, catalog.value, command.value) : []))
