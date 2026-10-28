@@ -91,6 +91,8 @@ services:
       - aas-environment
 
   seed-process-plan:
+    # The demo data is opt-in: `--profile demo` on `up`, or `run seed-process-plan`.
+    profiles: ["demo"]
     image: basyx-aas-web-ui:processsequence-dev
     build:
       context: ../../aas-web-ui

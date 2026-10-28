@@ -62,6 +62,10 @@ The example includes:
   run a functional test. Drive inspection is a nested subprocess. The combined view has seven steps.
 - Separate shared drive/control plans and their own material hierarchies; the robot references them.
 
+The demo data is opt-in: the `seed-process-plan` service is in the Compose profile `demo`, so a plain
+`up` starts BaSyx and the web UI with an empty repository. Add `--profile demo` to `up`, or run the
+service as below, to load it.
+
 The `seed-process-plan` service creates missing demo objects, adds capability references and corrects
 the known demo inputs' semantic IDs while preserving edited parameter values, custom elements and
 the stored plan. Its normal state after success is **Exited (0)**. The main services remain running.
