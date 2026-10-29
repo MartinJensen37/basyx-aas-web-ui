@@ -17,6 +17,14 @@
         @click="naming = true"
       >New skill</v-btn>
 
+      <v-btn
+        :disabled="!view || capabilities.length === 0"
+        prepend-icon="mdi-auto-fix"
+        size="small"
+        variant="tonal"
+        @click="openPlanning"
+      >Plan a skill</v-btn>
+
       <v-menu :close-on-content-click="false">
         <template #activator="{ props: activator }">
           <v-btn
@@ -188,16 +196,90 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="planning" max-width="520">
+      <v-card title="Plan a skill">
+        <v-card-text>
+          <p class="text-body-small text-medium-emphasis mb-3">
+            The planner (modreg serve) composes a module level skill of the components' skills that gives the capability with these values.
+          </p>
+
+          <v-select
+            v-model="capability"
+            density="compact"
+            :items="capabilityNames"
+            label="Capability"
+          />
+
+          <v-text-field
+            v-for="property in ranges"
+            :key="property.name"
+            v-model="values[property.name]"
+            density="compact"
+            :hint="`${property.min} to ${property.max}${property.unit ? ` ${property.unit}` : ''}`"
+            :label="property.name"
+            persistent-hint
+            type="number"
+          />
+
+          <v-combobox
+            v-model="results"
+            chips
+            class="mt-2"
+            density="compact"
+            hint="What the skill reports when it is done, e.g. FillWeight"
+            :items="resultNames"
+            label="Results"
+            multiple
+            persistent-hint
+          />
+
+          <v-text-field
+            v-model="plannedName"
+            class="mt-2"
+            density="compact"
+            hint="Letters, digits and _; empty: the planner names it"
+            label="Name"
+            persistent-hint
+          />
+
+          <v-alert
+            v-if="planFailure"
+            class="mt-3"
+            density="compact"
+            :text="planFailure"
+            type="error"
+          />
+
+          <div v-if="planned" class="mt-3">
+            <div class="text-subtitle-2">Steps</div>
+
+            <ol class="text-body-2 ms-5">
+              <li v-for="(step, index) in planned.steps" :key="index">{{ stepLine(step) }}</li>
+            </ol>
+          </div>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="planning = false">Cancel</v-btn>
+          <v-btn :disabled="!capability || busy" :loading="busy" @click="plan(false)">Plan</v-btn>
+          <v-btn color="primary" :disabled="!capability || busy" :loading="busy" @click="plan(true)">Plan and describe</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 
 <script setup lang="ts">
+  import type { CapabilityDescription } from '../utils/capabilities'
   import type { AasElement } from '../utils/sequenceModel'
   import type { SkillsOverview } from './skillOverview'
+  import type { Planned, PlannedStep } from './skillService'
   import { useRoute, useRouter } from 'vue-router'
   import { skillPath, withNewSkill } from './skillFlow'
   import { overview, parameterLine, shellName } from './skillOverview'
-  import { deriveCapabilities, derivedLines, setSkillServiceUrl, skillServiceUrl } from './skillService'
+  import { deriveCapabilities, derivedLines, planSkill, setSkillServiceUrl, skillServiceUrl } from './skillService'
   import { useSkillRepository } from './useSkillRepository'
 
   const props = defineProps<{ submodelId: string, aasId: string, path?: string }>()
@@ -215,6 +297,20 @@
   const name = ref('')
   const busy = ref(false)
   const service = ref(skillServiceUrl())
+  /** The capabilities the module offers: what a skill can be planned for. */
+  const capabilities = ref<CapabilityDescription[]>([])
+  const planning = ref(false)
+  const capability = ref('')
+  const values = ref<Record<string, string>>({})
+  const results = ref<string[]>([])
+  const plannedName = ref('')
+  const planned = ref<Planned | null>(null)
+  const planFailure = ref('')
+  const capabilityNames = computed(() => [...new Set(capabilities.value.map(item => item.name))])
+  const chosen = computed(() => capabilities.value.find(item => item.name === capability.value))
+  /** The values the capability is given (its ranges), and what it may report (its other properties). */
+  const ranges = computed(() => (chosen.value?.properties ?? []).filter(property => property.kind === 'range'))
+  const resultNames = computed(() => (chosen.value?.properties ?? []).filter(property => property.kind !== 'range').map(property => property.name))
 
   watch(() => [props.submodelId, props.aasId], load, { immediate: true })
 
@@ -222,8 +318,9 @@
     failure.value = ''
     try {
       model.value = await loadSkills(props.submodelId, props.aasId)
-      const [components, capabilities] = await Promise.all([loadComponentSkills(props.aasId), loadCapabilities(props.aasId)])
-      view.value = overview(model.value, props.aasId, components, capabilities)
+      const [components, found] = await Promise.all([loadComponentSkills(props.aasId), loadCapabilities(props.aasId)])
+      view.value = overview(model.value, props.aasId, components, found)
+      capabilities.value = found
       from.value = view.value.composites[0]?.idShort ?? ''
     } catch (error) {
       failure.value = error instanceof Error ? error.message : String(error)
@@ -234,6 +331,44 @@
   function open (skill: string): void {
     if (!model.value || !props.path) return
     router.push({ query: { ...route.query, path: `${props.path}/submodel-elements/${skillPath(model.value, skill)}` } })
+  }
+
+  function openPlanning (): void {
+    capability.value = capability.value || capabilityNames.value[0] || ''
+    planned.value = null
+    planFailure.value = ''
+    planning.value = true
+  }
+
+  function stepLine (step: PlannedStep): string {
+    const args = Object.entries(step.args).map(([key, value]) => `${key} = ${value}`).join(', ')
+    return `${step.skill} (${step.component})${args ? `: ${args}` : ''}`
+  }
+
+  /** Have the planner compose a skill for the capability; with ``write`` it is described on the AAS server and opened. */
+  async function plan (write: boolean): Promise<void> {
+    busy.value = true
+    planFailure.value = ''
+    planned.value = null
+    try {
+      const given = Object.fromEntries(Object.entries(values.value)
+        .filter(([, text]) => String(text).trim() !== '')
+        .map(([key, text]) => [key, Number(text)]))
+      planned.value = await planSkill(props.aasId, {
+        capability: capability.value, values: given, results: results.value, name: plannedName.value.trim() || undefined, write,
+      })
+      if (write && planned.value.name) {
+        const made = planned.value.name
+        planning.value = false
+        await load()
+        note.value = `${made} is planned and described; modsync reconfigure builds it.`
+        open(made)
+      }
+    } catch (error) {
+      planFailure.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      busy.value = false
+    }
   }
 
   async function create (): Promise<void> {
