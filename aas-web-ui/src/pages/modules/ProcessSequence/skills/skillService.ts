@@ -88,6 +88,24 @@ export async function planSkill (shell: string, request: PlanRequest, service = 
   return ask<Planned>(`/plan/${encodeURIComponent(shell)}`, request, 'plan the skill', service, fetcher)
 }
 
+/** A product's process AAS on its line, written by the service, and whether the recipe fits the line. */
+export type ProcessWritten = { product: string, process: string, idShort: string, result: 'Fits' | 'DoesNotFit', findings: string[] }
+
+/**
+ * Have the service write the product's process AAS: the recipe's bindings, as just saved, on the
+ * line that holds the modules they name; its Validation is the plan check's (iec61499-mgmt-py, F6).
+ */
+export async function writeProcess (product: string, service = skillServiceUrl(), fetcher: typeof fetch = fetch): Promise<ProcessWritten> {
+  return ask<ProcessWritten>(`/process/${encodeURIComponent(product)}`, undefined, 'write the process AAS', service, fetcher)
+}
+
+/** What became of the process AAS, in a sentence. */
+export function processLine (written: ProcessWritten): string {
+  return written.result === 'Fits'
+    ? `Its process AAS ${written.idShort} is written: the recipe fits the line.`
+    : `Its process AAS ${written.idShort} is written, but the recipe does not fit the line: ${written.findings.join('; ')}.`
+}
+
 /** One line per capability: what the module offers and through which skill, now or after a reconfiguration. */
 export function derivedLines (derived: Derived): string[] {
   return derived.capabilities.map(item => `${item.idShort} (${item.skill})${item.Availability === 'AfterReconfiguration' ? ', after a reconfiguration' : ''}`)

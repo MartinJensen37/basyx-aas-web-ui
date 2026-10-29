@@ -2,6 +2,7 @@ import type { PlanNode, PlanProcess, ProcessPlan } from '../types/plan'
 import { v4 } from 'uuid'
 import { useAASStore } from '@/store/AASDataStore'
 import { useInfrastructureStore } from '@/store/InfrastructureStore'
+import { processLine, writeProcess } from '../skills/skillService'
 import { canCall, flattenNodes, parsePlan } from '../utils/plan'
 import { createPlanHierarchy } from '../utils/planHierarchy'
 import { changeNodeType, unwrapConditional } from '../utils/planTransforms'
@@ -232,6 +233,13 @@ export function usePlanWorkspace () {
         plan.value = saved
         savedContent.value = JSON.stringify(saved)
         message.value = 'Process plan saved with the product.'
+        // The bindings make the product's process AAS on its line (F6); saved either way.
+        if (saved.scopes.some(item => flattenNodes(item.nodes).some(node => node.kind === 'step' && node.resourceAasId))) {
+          const process = await processMessage(saved.productAasId)
+          if (ticket === generation) {
+            message.value += ` ${process}`
+          }
+        }
       }
     } catch (error_) {
       if (ticket === generation) {
@@ -241,6 +249,15 @@ export function usePlanWorkspace () {
       if (ticket === generation) {
         saving.value = false
       }
+    }
+  }
+
+  /** What became of the product's process AAS; a service that is not reached is said, not raised. */
+  async function processMessage (productAasId: string): Promise<string> {
+    try {
+      return processLine(await writeProcess(productAasId))
+    } catch (error_) {
+      return `The process AAS was not written: ${error_ instanceof Error ? error_.message : String(error_)}`
     }
   }
 
