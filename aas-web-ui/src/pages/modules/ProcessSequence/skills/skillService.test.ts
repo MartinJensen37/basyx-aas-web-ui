@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkSkill, findingLine, planSkill } from './skillService'
+import { checkSkill, findingLine, planSkill, processLine, writeProcess } from './skillService'
 
 const service = 'http://service'
 const shell = 'https://smartproductionlab.aau.dk/aas/FillingModuleAAS'
@@ -33,5 +33,17 @@ describe('skill service', () => {
     const refused = answering(422, { error: 'refused', step: 'plan', reasons: ['no plan reaches FillVolume = 99'] })
     const refusal = planSkill(shell, { capability: 'Filling', values: { FillVolume: 99 } }, service, refused.fetcher)
     await expect(refusal).rejects.toThrow('The skill service could not plan the skill: refused; no plan reaches FillVolume = 99')
+  })
+
+  it('has a product\'s process AAS written on a line, and says whether the recipe fits it', async () => {
+    const product = 'https://smartproductionlab.aau.dk/aas/Vial2mLAAS'
+    const line = 'https://smartproductionlab.aau.dk/aas/FillingLineAAS'
+    const { sent, fetcher } = answering(200, { product, process: 'urn:process', idShort: 'Vial2mLOnFillingLineAAS', result: 'Fits', findings: [] })
+    const written = await writeProcess(product, { line }, service, fetcher)
+    expect(sent[0]!.url).toBe(`${service}/process/${encodeURIComponent(product)}`)
+    expect(JSON.parse(sent[0]!.init.body as string)).toEqual({ line })
+    expect(processLine(written)).toBe('Its process AAS Vial2mLOnFillingLineAAS is written: the recipe fits the line.')
+    expect(processLine({ ...written, result: 'DoesNotFit', findings: ['Inspection: not bound'] }))
+      .toBe('Its process AAS Vial2mLOnFillingLineAAS is written, but the recipe does not fit the line: Inspection: not bound.')
   })
 })

@@ -92,11 +92,13 @@ export async function planSkill (shell: string, request: PlanRequest, service = 
 export type ProcessWritten = { product: string, process: string, idShort: string, result: 'Fits' | 'DoesNotFit', findings: string[] }
 
 /**
- * Have the service write the product's process AAS: the recipe's bindings, as just saved, on the
- * line that holds the modules they name; its Validation is the plan check's (iec61499-mgmt-py, F6).
+ * Have the service write the product's process AAS: the recipe's bindings, as saved, on ``line``
+ * (by default the one that holds the modules they name); its Validation is the plan check's
+ * (iec61499-mgmt-py, F6). ``status``: Draft unless said otherwise.
  */
-export async function writeProcess (product: string, service = skillServiceUrl(), fetcher: typeof fetch = fetch): Promise<ProcessWritten> {
-  return ask<ProcessWritten>(`/process/${encodeURIComponent(product)}`, undefined, 'write the process AAS', service, fetcher)
+export async function writeProcess (product: string, request: { line?: string, status?: string } = {}, service = skillServiceUrl(),
+  fetcher: typeof fetch = fetch): Promise<ProcessWritten> {
+  return ask<ProcessWritten>(`/process/${encodeURIComponent(product)}`, request, 'write the process AAS', service, fetcher)
 }
 
 /** What became of the process AAS, in a sentence. */
