@@ -32,11 +32,13 @@ export function setSkillServiceUrl (url: string): void {
   }
 }
 
-/** Derive the module's offered capabilities anew from its skills and store them on the AAS server. */
-export async function deriveCapabilities (shell: string, service = skillServiceUrl(), fetcher: typeof fetch = fetch): Promise<Derived> {
+/** A request to the skill service; what it did not do is raised with its reasons (``doing``: in words). */
+async function ask<T> (path: string, body: unknown, doing: string, service: string, fetcher: typeof fetch): Promise<T> {
   let response: Response
   try {
-    response = await fetcher(`${service}/capabilities/${encodeURIComponent(shell)}`, { method: 'POST' })
+    response = await fetcher(`${service}${path}`, body === undefined
+      ? { method: 'POST' }
+      : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   } catch (error) {
     throw new Error(`The skill service at ${service} was not reached (${error instanceof Error ? error.message : String(error)}). `
       + 'Start it with `modreg serve --basyx <AAS server>`, or set its address in the overview\'s settings.', { cause: error })
@@ -44,9 +46,46 @@ export async function deriveCapabilities (shell: string, service = skillServiceU
   const answer = await response.json().catch(() => ({}))
   if (!response.ok) {
     const reasons: string[] = answer.reasons ?? []
-    throw new Error(`The skill service could not derive the capabilities: ${[answer.error, ...reasons].filter(Boolean).join('; ') || response.statusText}`)
+    throw new Error(`The skill service could not ${doing}: ${[answer.error, ...reasons].filter(Boolean).join('; ') || response.statusText}`)
   }
-  return answer as Derived
+  return answer as T
+}
+
+/** Derive the module's offered capabilities anew from its skills and store them on the AAS server. */
+export async function deriveCapabilities (shell: string, service = skillServiceUrl(), fetcher: typeof fetch = fetch): Promise<Derived> {
+  return ask<Derived>(`/capabilities/${encodeURIComponent(shell)}`, undefined, 'derive the capabilities', service, fetcher)
+}
+
+/** What does not hold at a step of a skill (modplan's checker), and the skills that would make it hold if run before it. */
+export type Finding = { step: string, what: string, fix: string[] }
+export type Checked = { shell: string, skills: Record<string, Finding[]> }
+
+/**
+ * Run a module level skill through the module's states (modplan's checker): ``skill`` is its element
+ * as the editor holds it, checked in place of the saved one. Each finding names the step it is about.
+ */
+export async function checkSkill (shell: string, skill: unknown, service = skillServiceUrl(), fetcher: typeof fetch = fetch): Promise<Checked> {
+  return ask<Checked>(`/check/${encodeURIComponent(shell)}`, { skill }, 'check the skill', service, fetcher)
+}
+
+/** A finding in words: ``step: what (run X or Y before it)``; the skill's end is ``At the end``. */
+export function findingLine (finding: Finding): string {
+  const where = finding.step === 'end' ? 'At the end' : finding.step
+  return `${where}: ${finding.what}${finding.fix.length > 0 ? ` (run ${finding.fix.join(' or ')} before it)` : ''}`
+}
+
+/** A skill planned for a capability (modplan): its steps, and with ``write`` its name and where it was stored. */
+export type PlannedStep = { skill: string, capability: string, component: string, args: Record<string, unknown> }
+export type Planned = { shell: string, capability: string, steps: PlannedStep[], name?: string, stored?: string }
+export type PlanRequest = { capability: string, values: Record<string, number>, results?: string[], name?: string, write?: boolean }
+
+/**
+ * Plan a module level skill that achieves ``capability`` with ``values`` (e.g. FillVolume) and
+ * reports ``results``; with ``write`` it is described on the AAS server under ``name``, not built
+ * (modsync reconfigure builds it).
+ */
+export async function planSkill (shell: string, request: PlanRequest, service = skillServiceUrl(), fetcher: typeof fetch = fetch): Promise<Planned> {
+  return ask<Planned>(`/plan/${encodeURIComponent(shell)}`, request, 'plan the skill', service, fetcher)
 }
 
 /** One line per capability: what the module offers and through which skill, now or after a reconfiguration. */

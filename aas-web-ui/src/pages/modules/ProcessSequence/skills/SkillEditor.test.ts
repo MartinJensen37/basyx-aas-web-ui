@@ -11,6 +11,7 @@ const model = (shell: string) => structuredClone((fixture.submodels as AasElemen
 const saved: { submodel: AasElement, skill: string, created: boolean }[] = []
 const derived: string[] = []
 const pushed: unknown[] = []
+const checked: { shell: string, skill: AasElement }[] = []
 let reachable = true
 
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: { aas: 'x' } }), useRouter: () => ({ push: (to: unknown) => pushed.push(to) }) }))
@@ -33,6 +34,13 @@ vi.mock('./skillService', () => ({
   },
   derivedLines: (answer: { capabilities: { idShort: string, skill: string, Availability?: string }[] }) =>
     answer.capabilities.map(item => `${item.idShort} (${item.skill})${item.Availability ? ', after a reconfiguration' : ''}`),
+  // The checker finds the dose given with the needle up, and nothing once the needle is down first.
+  checkSkill: async (shell: string, skill: AasElement) => {
+    checked.push({ shell, skill })
+    const first = (readFlow({ submodelElements: [skill] }, skill.idShort, 'Start') as { id: string }[])[0]?.id
+    return { shell, skills: { [skill.idShort]: first === 'NeedleDown' ? [] : [{ step: 'Dispense', what: 'LinearAxis.Position = FillPosition does not hold', fix: ['MoveAxis'] }] } }
+  },
+  findingLine: (finding: { step: string, what: string, fix: string[] }) => `${finding.step}: ${finding.what} (run ${finding.fix.join(' or ')} before it)`,
 }))
 
 beforeAll(() => {
@@ -48,6 +56,7 @@ beforeEach(() => {
   saved.length = 0
   derived.length = 0
   pushed.length = 0
+  checked.length = 0
   reachable = true
 })
 
@@ -97,6 +106,30 @@ describe('skill editor', () => {
     state.open('Stop')
     await flushPromises()
     expect(state.nodes.map((node: { id: string }) => node.id)).toEqual(['Home'])
+    wrapper.unmount()
+  })
+
+  it('has the flow on screen checked, before it is saved, and forgets the result when the flow changes', async () => {
+    const wrapper = mounted('Dispensing')
+    await flushPromises()
+    const state = wrapper.vm as any
+    await state.inspect()
+    await flushPromises()
+    expect(checked.map(item => [item.shell, item.skill.idShort])).toEqual([[`${base}/FillingModuleAAS`, 'Dispensing']])
+    expect(state.checked).toEqual([])
+    expect(wrapper.text()).toContain('conditions hold, and so does the end')
+
+    // Without the needle down first: what it is sent is the flow on screen, not what is saved.
+    state.nodes = state.nodes.filter((node: { id: string }) => node.id !== 'NeedleDown')
+    await flushPromises()
+    expect(state.checked).toBeNull()
+    await state.inspect()
+    await flushPromises()
+    const sent = readFlow({ submodelElements: [checked[1]!.skill] }, 'Dispensing', 'Start') as { id: string }[]
+    expect(sent.map(node => node.id)).toEqual(['Dispense', 'Home', 'Weigh'])
+    expect(state.checked).toEqual(['Dispense: LinearAxis.Position = FillPosition does not hold (run MoveAxis before it)'])
+    expect(wrapper.text()).toContain('run MoveAxis before it')
+    expect(saved).toHaveLength(0)
     wrapper.unmount()
   })
 

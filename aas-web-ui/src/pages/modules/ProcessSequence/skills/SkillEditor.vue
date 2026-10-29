@@ -35,6 +35,16 @@
       >New skill from this</v-btn>
 
       <v-btn
+        v-if="owner && owner.kind === 'Composite'"
+        :disabled="issues.length > 0 || busy || checking"
+        :loading="checking"
+        prepend-icon="mdi-check-decagram-outline"
+        size="small"
+        variant="tonal"
+        @click="inspect"
+      >Check</v-btn>
+
+      <v-btn
         v-if="owner && owner.kind !== 'Primitive'"
         color="primary"
         :disabled="!pending || issues.length > 0 || busy"
@@ -79,6 +89,26 @@
         density="compact"
         :text="offered"
         type="success"
+        variant="tonal"
+      />
+
+      <v-alert
+        v-if="checked && checked.length === 0"
+        class="mx-3 mb-2"
+        density="compact"
+        text="Checked: run from the module's rest state, every step's conditions hold, and so does the end."
+        type="success"
+        variant="tonal"
+      />
+
+      <v-alert
+        v-for="line in checked ?? []"
+        :key="line"
+        class="mx-3 mb-2"
+        density="compact"
+        :text="line"
+        title="The checker"
+        type="warning"
         variant="tonal"
       />
 
@@ -174,7 +204,7 @@
   import { flowIssues, readFlow, readSkills, withFlow, withNewSkill, withParameter } from './skillFlow'
   import SkillFlowGraph from './SkillFlowGraph.vue'
   import { parameterLine } from './skillOverview'
-  import { deriveCapabilities, derivedLines } from './skillService'
+  import { checkSkill, deriveCapabilities, derivedLines, findingLine } from './skillService'
   import SkillStepInspector from './SkillStepInspector.vue'
   import { useSkillRepository } from './useSkillRepository'
 
@@ -204,6 +234,9 @@
   const failure = ref('')
   const offered = ref('')
   const loaded = ref(false)
+  /** The checker's findings on the flow on screen, in words; null until it is checked (again). */
+  const checked = ref<string[] | null>(null)
+  const checking = ref(false)
 
   const own = computed(() => (model.value ? readSkills(model.value, props.aasId) : []))
   const catalog = computed(() => [...own.value, ...components.value])
@@ -232,6 +265,10 @@
   })
 
   watch(() => [props.submodelId, props.aasId, props.skill], load, { immediate: true })
+  // A changed flow has not been checked.
+  watch(nodes, () => {
+    checked.value = null
+  }, { deep: true })
 
   async function load (): Promise<void> {
     failure.value = ''
@@ -290,6 +327,24 @@
     } catch (error) {
       offered.value = ''
       failure.value = `Saved, but the capabilities were not derived anew. ${error instanceof Error ? error.message : String(error)}`
+    }
+  }
+
+  /** Have the skill service run the skill as it is on screen through the module's states (modplan's checker). */
+  async function inspect (): Promise<void> {
+    if (!model.value || issues.value.length > 0) return
+    checking.value = true
+    failure.value = ''
+    try {
+      const element = ((applied.value ?? model.value).submodelElements ?? []).find((item: AasElement) => item.idShort === props.skill)
+      // eslint-disable-next-line unicorn/prefer-structured-clone -- plain JSON: nested reactive proxies cannot be cloned
+      const found = await checkSkill(props.aasId, JSON.parse(JSON.stringify(element)))
+      checked.value = (found.skills[props.skill] ?? []).map(finding => findingLine(finding))
+    } catch (error) {
+      checked.value = null
+      failure.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      checking.value = false
     }
   }
 
